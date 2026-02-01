@@ -76,9 +76,8 @@ export default function DynamicServiceForm({
 
     // Build scheduled_time for appointments
     let scheduledTime = null;
-    if (serviceType === 'APPOINTMENT' && serviceData.scheduled_time) {
-      const today = new Date().toISOString().split('T')[0];
-      scheduledTime = `${today}T${serviceData.scheduled_time}:00`;
+    if (serviceType === 'APPOINTMENT' && serviceData.scheduled_date && serviceData.scheduled_time) {
+      scheduledTime = `${serviceData.scheduled_date}T${serviceData.scheduled_time}:00`;
     }
 
     onSubmit({
@@ -98,6 +97,7 @@ export default function DynamicServiceForm({
       case 'text':
       case 'tel':
       case 'time':
+      case 'date':
         return (
           <div key={field.name}>
             <label className="label">{field.label}</label>
@@ -249,33 +249,35 @@ export default function DynamicServiceForm({
         />
       </div>
 
-      {/* Priority */}
-      <div>
-        <label className="label">Priority</label>
-        <div className="grid grid-cols-3 gap-3">
-          {(['LOW', 'NORMAL', 'HIGH'] as PriorityLevel[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPriority(p)}
-              className={`
-                py-3 px-4 rounded-lg border-2 font-semibold transition-all
-                ${
-                  priority === p
-                    ? p === 'HIGH'
-                      ? 'bg-red-600 border-red-700 text-white'
-                      : p === 'NORMAL'
-                      ? 'bg-sky-500 border-sky-600 text-white'
-                      : 'bg-blue-500 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
-                }
-              `}
-            >
-              {PRIORITY_LABELS[p]}
-            </button>
-          ))}
+      {/* Priority - hidden for appointments */}
+      {serviceType !== 'APPOINTMENT' && (
+        <div>
+          <label className="label">Priority</label>
+          <div className="grid grid-cols-3 gap-3">
+            {(['LOW', 'NORMAL', 'HIGH'] as PriorityLevel[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPriority(p)}
+                className={`
+                  py-3 px-4 rounded-lg border-2 font-semibold transition-all
+                  ${
+                    priority === p
+                      ? p === 'HIGH'
+                        ? 'bg-red-600 border-red-700 text-white'
+                        : p === 'NORMAL'
+                        ? 'bg-sky-500 border-sky-600 text-white'
+                        : 'bg-blue-500 border-blue-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                  }
+                `}
+              >
+                {PRIORITY_LABELS[p]}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-4 pt-4">

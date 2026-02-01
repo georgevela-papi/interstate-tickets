@@ -15,6 +15,7 @@ const SERVICE_ICONS: Record<ServiceType, string> = {
   NEW_TIRES: '🆕',
   USED_TIRES: '♻️',
   DETAILING: '✨',
+  MAINTENANCE: '🔩',
   APPOINTMENT: '📅',
 };
 

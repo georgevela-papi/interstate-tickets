@@ -17,7 +17,7 @@ export default function QueuePage() {
 
   useEffect(() => {
     const currentSession = getSession();
-    if (!currentSession || currentSession.role !== 'TECHNICIAN') {
+    if (!currentSession || !['TECHNICIAN', 'MANAGER'].includes(currentSession.role)) {
       router.push('/');
       return;
     }

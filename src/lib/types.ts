@@ -11,6 +11,7 @@ export type ServiceType =
   | 'NEW_TIRES'
   | 'USED_TIRES'
   | 'DETAILING'
+  | 'MAINTENANCE'
   | 'APPOINTMENT';
 
 export interface Staff {
@@ -68,6 +69,7 @@ export type ServiceData =
   | TireData
   | DetailingData
   | AppointmentData
+  | MaintenanceData
   | Record<string, never>;
 
 export interface MountBalanceData {
@@ -95,14 +97,20 @@ export interface DetailingData {
 export interface AppointmentData {
   customer_name: string;
   phone: string;
+  scheduled_date: string;
   scheduled_time: string;
+  appointment_service: ServiceType;
+}
+
+export interface MaintenanceData {
+  description: string;
 }
 
 // Form field definitions
 export interface ServiceFieldConfig {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'radio' | 'textarea' | 'time' | 'tel';
+  type: 'text' | 'number' | 'select' | 'radio' | 'textarea' | 'time' | 'tel' | 'date';
   required: boolean;
   options?: string[] | { value: string; label: string }[];
   min?: number;
@@ -120,6 +128,7 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   NEW_TIRES: 'New Tires',
   USED_TIRES: 'Used Tires',
   DETAILING: 'Detailing',
+  MAINTENANCE: 'Maintenance',
   APPOINTMENT: 'Appointment',
 };
 

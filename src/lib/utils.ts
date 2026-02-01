@@ -99,6 +99,15 @@ export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
       ],
     },
   ],
+  MAINTENANCE: [
+    {
+      name: 'description',
+      label: 'Work Description',
+      type: 'text',
+      required: true,
+      placeholder: 'Brakes, rotors, inspection, etc.',
+    },
+  ],
   APPOINTMENT: [
     {
       name: 'customer_name',
@@ -117,10 +126,32 @@ export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
       errorMessage: 'Enter 10-digit phone number',
     },
     {
+      name: 'scheduled_date',
+      label: 'Appointment Date',
+      type: 'date',
+      required: true,
+    },
+    {
       name: 'scheduled_time',
-      label: 'Scheduled Time',
+      label: 'Appointment Time',
       type: 'time',
       required: true,
+    },
+    {
+      name: 'appointment_service',
+      label: 'Service Needed',
+      type: 'select',
+      required: true,
+      options: [
+        { value: '', label: 'Select a service...' },
+        { value: 'MOUNT_BALANCE', label: 'Mount/Balance' },
+        { value: 'FLAT_REPAIR', label: 'Flat Repair' },
+        { value: 'ROTATION', label: 'Rotation' },
+        { value: 'NEW_TIRES', label: 'New Tires' },
+        { value: 'USED_TIRES', label: 'Used Tires' },
+        { value: 'DETAILING', label: 'Detailing' },
+        { value: 'MAINTENANCE', label: 'Maintenance' },
+      ],
     },
   ],
 };
@@ -172,6 +203,8 @@ export function getServiceDataText(serviceType: ServiceType, serviceData: any): 
       }`;
     case 'DETAILING':
       return `${serviceData.service_level || ''} Detail`;
+    case 'MAINTENANCE':
+      return serviceData.description || 'General maintenance';
     case 'APPOINTMENT':
       return `${serviceData.customer_name || ''} - ${serviceData.phone || ''}`;
     default:

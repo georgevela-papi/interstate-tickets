@@ -13,11 +13,12 @@ export default function IntakePage() {
   const [session, setSession] = useState<any>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const currentSession = getSession();
-    if (!currentSession || currentSession.role !== 'SERVICE_WRITER') {
+    if (!currentSession || !['SERVICE_WRITER', 'MANAGER'].includes(currentSession.role)) {
       router.push('/');
       return;
     }
@@ -36,6 +37,8 @@ export default function IntakePage() {
     scheduledTime: string | null;
     notes: string;
   }) => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       // Get staff ID
       const { data: staff } = await supabase
@@ -70,6 +73,8 @@ export default function IntakePage() {
     } catch (error) {
       console.error('Error creating ticket:', error);
       alert('Failed to create ticket. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 

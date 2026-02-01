@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, getSession, clearSession } from '@/lib/supabase';
+import { getSession, clearSession } from '@/lib/supabase';
 import TechnicianManager from '@/components/TechnicianManager';
 import ReportsDashboard from '@/components/ReportsDashboard';
-import type { Technician } from '@/lib/types';
+import CompletedJobsManager from '@/components/CompletedJobsManager';
 import Image from 'next/image';
 
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [activeTab, setActiveTab] = useState<'technicians' | 'reports'>('technicians');
+  const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'completed'>('technicians');
   const router = useRouter();
 
   useEffect(() => {
@@ -21,19 +20,7 @@ export default function AdminPage() {
       return;
     }
     setSession(currentSession);
-    loadTechnicians();
   }, [router]);
-
-  const loadTechnicians = async () => {
-    const { data } = await supabase
-      .from('technicians')
-      .select('*')
-      .order('name');
-
-    if (data) {
-      setTechnicians(data);
-    }
-  };
 
   const handleLogout = () => {
     clearSession();
@@ -116,6 +103,19 @@ export default function AdminPage() {
             >
               Reports & KPIs
             </button>
+            <button
+              onClick={() => setActiveTab('completed')}
+              className={`
+                py-4 px-2 border-b-2 font-semibold transition-colors
+                ${
+                  activeTab === 'completed'
+                    ? 'border-sky-500 text-sky-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }
+              `}
+            >
+              Completed Jobs
+            </button>
           </div>
         </div>
       </div>
@@ -125,13 +125,12 @@ export default function AdminPage() {
         <div className="max-w-5xl mx-auto">
           {activeTab === 'technicians' ? (
             <div className="card">
-              <TechnicianManager
-                technicians={technicians}
-                onUpdate={loadTechnicians}
-              />
+              <TechnicianManager />
             </div>
-          ) : (
+          ) : activeTab === 'reports' ? (
             <ReportsDashboard />
+          ) : (
+            <CompletedJobsManager />
           )}
         </div>
       </main>
