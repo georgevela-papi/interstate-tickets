@@ -121,14 +121,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center">
-            <strong>Default ID Codes:</strong>
-            <br />
-            SW01 (Service Writer) • T01/T02/T03 (Technicians) • ADMIN (Manager)
-          </p>
-        </div>
       </div>
     </div>
   );
