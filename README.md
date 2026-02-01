@@ -58,12 +58,6 @@ npm run dev
 
 Visit http://localhost:3000
 
-### 3. Default Login Codes
-
-- **SW01** - Service Writer (Front iPad - Create Tickets)
-- **T01, T02, T03** - Technicians (Back iPad - Complete Jobs)
-- **ADMIN** - Manager (Admin Dashboard)
-
 ---
 
 ## Deployment
