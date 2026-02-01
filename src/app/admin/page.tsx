@@ -4,20 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, getSession, clearSession } from '@/lib/supabase';
 import TechnicianManager from '@/components/TechnicianManager';
+import ReportsDashboard from '@/components/ReportsDashboard';
 import type { Technician } from '@/lib/types';
 import Image from 'next/image';
-
-interface KPIData {
-  totalToday: number;
-  totalThisWeek: number;
-  avgTimeMinutes: number;
-  pendingCount: number;
-}
 
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [kpis, setKpis] = useState<KPIData | null>(null);
   const [activeTab, setActiveTab] = useState<'technicians' | 'reports'>('technicians');
   const router = useRouter();
 
@@ -29,7 +22,6 @@ export default function AdminPage() {
     }
     setSession(currentSession);
     loadTechnicians();
-    loadKPIs();
   }, [router]);
 
   const loadTechnicians = async () => {
@@ -40,44 +32,6 @@ export default function AdminPage() {
 
     if (data) {
       setTechnicians(data);
-    }
-  };
-
-  const loadKPIs = async () => {
-    try {
-      // Total completed today
-      const { data: todayData, error: todayError } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'COMPLETED')
-        .gte('completed_at', new Date().toISOString().split('T')[0]);
-
-      // Total completed this week
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-      const { data: weekData, error: weekError } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'COMPLETED')
-        .gte('completed_at', weekStart.toISOString());
-
-      // Average time in system (last 7 days)
-      const { data: avgData } = await supabase.rpc('get_avg_completion_time');
-
-      // Pending count
-      const { data: pendingData, error: pendingError } = await supabase
-        .from('tickets')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
-
-      setKpis({
-        totalToday: todayData?.length || 0,
-        totalThisWeek: weekData?.length || 0,
-        avgTimeMinutes: avgData?.[0]?.avg_minutes || 0,
-        pendingCount: pendingData?.length || 0,
-      });
-    } catch (error) {
-      console.error('Error loading KPIs:', error);
     }
   };
 
@@ -177,54 +131,7 @@ export default function AdminPage() {
               />
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* KPI Cards */}
-              {kpis && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="card bg-gradient-to-br from-sky-500 to-sky-600 text-white">
-                    <p className="text-sm font-semibold opacity-90 mb-1">TODAY</p>
-                    <p className="text-4xl font-bold">{kpis.totalToday}</p>
-                    <p className="text-sm opacity-80">Jobs Completed</p>
-                  </div>
-
-                  <div className="card bg-gradient-to-br from-green-500 to-green-600 text-white">
-                    <p className="text-sm font-semibold opacity-90 mb-1">THIS WEEK</p>
-                    <p className="text-4xl font-bold">{kpis.totalThisWeek}</p>
-                    <p className="text-sm opacity-80">Jobs Completed</p>
-                  </div>
-
-                  <div className="card bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-                    <p className="text-sm font-semibold opacity-90 mb-1">AVG TIME</p>
-                    <p className="text-4xl font-bold">{Math.round(kpis.avgTimeMinutes)}</p>
-                    <p className="text-sm opacity-80">Minutes</p>
-                  </div>
-
-                  <div className="card bg-gradient-to-br from-red-500 to-red-600 text-white">
-                    <p className="text-sm font-semibold opacity-90 mb-1">PENDING</p>
-                    <p className="text-4xl font-bold">{kpis.pendingCount}</p>
-                    <p className="text-sm opacity-80">In Queue</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Coming Soon */}
-              <div className="card">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                  Detailed Reports (Coming Soon)
-                </h2>
-                <p className="text-gray-600 mb-4">
-                  Full reporting dashboard with the following features:
-                </p>
-                <ul className="space-y-2 text-gray-700">
-                  <li>• Jobs by service type breakdown</li>
-                  <li>• Jobs completed per technician</li>
-                  <li>• Busiest hours analysis</li>
-                  <li>• Priority distribution</li>
-                  <li>• Export to CSV for accounting</li>
-                  <li>• Date range filters (Today/Week/Month/Custom)</li>
-                </ul>
-              </div>
-            </div>
+            <ReportsDashboard />
           )}
         </div>
       </main>
