@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, getSession, clearSession } from '@/lib/supabase';
-import TechnicianManager from '@/components/TechnicianManager';
+// TEAM MANAGEMENT: Import new unified TeamManager (replaces TechnicianManager)
+import TeamManager from '@/components/TeamManager';
+import type { TeamMember } from '@/components/TeamManager';
 import { SERVICE_TYPE_LABELS } from '@/lib/types';
 import Image from 'next/image';
 
@@ -28,9 +30,11 @@ interface CompletedTicket {
 
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
-  const [technicians, setTechnicians] = useState<any[]>([]);
+  // TEAM MANAGEMENT: Renamed state — now holds both technicians and front desk
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [kpis, setKpis] = useState<KPIData | null>(null);
-  const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'tickets'>('technicians');
+  // TEAM MANAGEMENT: Tab key renamed for clarity (value still 'team' internally)
+  const [activeTab, setActiveTab] = useState<'team' | 'reports' | 'tickets'>('team');
   const [reportPeriod, setReportPeriod] = useState<'today' | 'week' | 'month' | 'all'>('week');
   const [serviceBreakdown, setServiceBreakdown] = useState<ServiceBreakdown[]>([]);
   const [techPerformance, setTechPerformance] = useState<TechPerformance[]>([]);
@@ -46,7 +50,8 @@ export default function AdminPage() {
       return;
     }
     setSession(currentSession);
-    loadTechnicians();
+    // TEAM MANAGEMENT: Load all team members on mount
+    loadTeamMembers();
     loadKPIs();
   }, [router]);
 
@@ -55,42 +60,57 @@ export default function AdminPage() {
     if (activeTab === 'tickets') loadCompletedTickets();
   }, [activeTab, reportPeriod]);
 
-  // FIX 3: Load technicians joined with staff to get id_code
-  const loadTechnicians = async () => {
-    // Fetch ALL technicians (including inactive) for management
-    const { data: techData } = await supabase
-      .from('technicians')
-      .select('id, staff_id, name, active')
+  // ── TEAM MANAGEMENT: Unified loader for Technicians + Front Desk ──
+  // Fetches all staff with role TECHNICIAN or SERVICE_WRITER,
+  // then left-joins technicians table for techs.
+  const loadTeamMembers = async () => {
+    // 1. Get ALL non-manager staff (includes inactive for management)
+    const { data: staffData } = await supabase
+      .from('staff')
+      .select('id, id_code, name, role, active')
+      .in('role', ['TECHNICIAN', 'SERVICE_WRITER'])
       .order('active', { ascending: false })
       .order('name');
 
-    if (!techData) {
-      setTechnicians([]);
+    if (!staffData) {
+      setTeamMembers([]);
       return;
     }
 
-    // Join with staff to get id_codes
-    const staffIds = techData.map(t => t.staff_id).filter(Boolean);
-    let staffMap: Record<string, string> = {};
+    // 2. Get technician records to link tech staff → technician.id
+    const techStaffIds = staffData
+      .filter(s => s.role === 'TECHNICIAN')
+      .map(s => s.id);
 
-    if (staffIds.length > 0) {
-      const { data: staffData } = await supabase
-        .from('staff')
-        .select('id, id_code')
-        .in('id', staffIds);
+    let techMap: Record<string, string> = {}; // staff_id → technician.id
+    if (techStaffIds.length > 0) {
+      const { data: techRows } = await supabase
+        .from('technicians')
+        .select('id, staff_id')
+        .in('staff_id', techStaffIds);
 
-      if (staffData) {
-        staffMap = Object.fromEntries(staffData.map(s => [s.id, s.id_code]));
+      if (techRows) {
+        techMap = Object.fromEntries(techRows.map(t => [t.staff_id, t.id]));
       }
     }
 
-    const merged = techData.map(t => ({
-      ...t,
-      id_code: t.staff_id ? (staffMap[t.staff_id] || '—') : '—',
+    // 3. Build unified TeamMember list
+    const members: TeamMember[] = staffData.map(s => ({
+      id: s.role === 'TECHNICIAN' && techMap[s.id]
+        ? techMap[s.id]   // use technician.id as primary key for techs
+        : s.id,           // use staff.id for front desk
+      staff_id: s.id,
+      technician_id: techMap[s.id] || null,
+      name: s.name,
+      role: s.role as 'TECHNICIAN' | 'SERVICE_WRITER',
+      active: s.active,
+      id_code: s.id_code,
     }));
 
-    setTechnicians(merged);
+    setTeamMembers(members);
   };
+
+  // ── Everything below this line is UNCHANGED from the previous version ──
 
   const loadKPIs = async () => {
     try {
@@ -344,11 +364,11 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Tabs */}
+      {/* Tabs — TEAM MANAGEMENT: "Manage Technicians" → "Team" */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
           <div className="flex space-x-6 overflow-x-auto">
-            {(['technicians', 'reports', 'tickets'] as const).map((tab) => (
+            {(['team', 'reports', 'tickets'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -358,7 +378,7 @@ export default function AdminPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {tab === 'technicians' ? 'Manage Technicians' : tab === 'reports' ? 'Reports & KPIs' : 'Manage Tickets'}
+                {tab === 'team' ? 'Team' : tab === 'reports' ? 'Reports & KPIs' : 'Manage Tickets'}
               </button>
             ))}
           </div>
@@ -368,10 +388,10 @@ export default function AdminPage() {
       {/* Content */}
       <main className="container mx-auto px-4 py-6 md:py-8">
         <div className="max-w-5xl mx-auto">
-          {/* ── TAB: Technicians ── */}
-          {activeTab === 'technicians' && (
+          {/* ── TAB: Team (TEAM MANAGEMENT) ── */}
+          {activeTab === 'team' && (
             <div className="card">
-              <TechnicianManager technicians={technicians} onUpdate={loadTechnicians} />
+              <TeamManager members={teamMembers} onUpdate={loadTeamMembers} />
             </div>
           )}
 
