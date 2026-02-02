@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { ActiveQueueItem, Technician } from '@/lib/types';
+import { useState } from 'react';
+import { supabase, getSession } from '@/lib/supabase';
+import type { ActiveQueueItem } from '@/lib/types';
 import { SERVICE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/types';
 import { formatDateTime, getServiceDataText } from '@/lib/utils';
 
@@ -17,40 +17,48 @@ export default function TicketDetailModal({
   onClose,
   onComplete,
 }: TicketDetailModalProps) {
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [selectedTech, setSelectedTech] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadTechnicians();
-  }, []);
-
-  const loadTechnicians = async () => {
-    const { data } = await supabase
-      .from('technicians')
-      .select('*')
-      .eq('active', true)
-      .order('name');
-
-    if (data) {
-      setTechnicians(data);
-    }
-  };
-
+  // FIX 2A: Auto-determine technician from logged-in session
   const handleComplete = async () => {
-    if (!selectedTech) {
-      alert('Please select a technician');
-      return;
-    }
-
     setLoading(true);
-
     try {
+      const session = getSession();
+      if (!session) {
+        alert('Session expired. Please log in again.');
+        return;
+      }
+
+      // Look up the technician record for the logged-in staff member
+      const { data: staffData } = await supabase
+        .from('staff')
+        .select('id')
+        .eq('id_code', session.idCode)
+        .eq('active', true)
+        .single();
+
+      if (!staffData) {
+        alert('Your account was not found or is inactive.');
+        return;
+      }
+
+      const { data: techData } = await supabase
+        .from('technicians')
+        .select('id')
+        .eq('staff_id', staffData.id)
+        .eq('active', true)
+        .single();
+
+      if (!techData) {
+        alert('No active technician profile found for your account.');
+        return;
+      }
+
       const { error } = await supabase
         .from('tickets')
         .update({
           status: 'COMPLETED',
-          completed_by: selectedTech,
+          completed_by: techData.id,
           completed_at: new Date().toISOString(),
         })
         .eq('id', ticket.id);
@@ -67,117 +75,88 @@ export default function TicketDetailModal({
     }
   };
 
-  // Close on escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="bg-sky-500 text-white p-6 rounded-t-xl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold mb-1">
-                Ticket #{ticket.ticket_number}
-              </h2>
-              <p className="text-sky-100">
-                {SERVICE_TYPE_LABELS[ticket.service_type]}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-white hover:text-sky-100 text-3xl font-bold leading-none"
-            >
-              ×
-            </button>
-          </div>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">
+            Ticket #{ticket.ticket_number}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
+            ✕
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Time & Priority */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600 font-semibold mb-1">CREATED</p>
-              <p className="text-lg">{formatDateTime(ticket.created_at)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 font-semibold mb-1">PRIORITY</p>
-              <span
-                className={`
-                  inline-block px-4 py-2 rounded-lg font-bold text-lg
-                  ${
-                    ticket.priority === 'HIGH'
-                      ? 'bg-red-100 text-red-900'
-                      : ticket.priority === 'NORMAL'
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'bg-blue-100 text-blue-900'
-                  }
-                `}
-              >
-                🔴 {PRIORITY_LABELS[ticket.priority]}
-              </span>
-            </div>
+        {/* Details */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-lg font-semibold text-sky-600">
+              {SERVICE_TYPE_LABELS[ticket.service_type]}
+            </span>
+            <span
+              className={`px-3 py-1 rounded-full text-sm font-bold ${
+                ticket.priority === 'HIGH'
+                  ? 'bg-red-100 text-red-900'
+                  : ticket.priority === 'NORMAL'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'bg-blue-100 text-blue-900'
+              }`}
+            >
+              {PRIORITY_LABELS[ticket.priority]}
+            </span>
           </div>
 
-          {/* Vehicle */}
-          <div>
-            <p className="text-sm text-gray-600 font-semibold mb-2">VEHICLE</p>
-            <p className="text-xl font-semibold text-gray-800">{ticket.vehicle}</p>
-          </div>
+          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+            <div>
+              <span className="text-sm text-gray-500">Vehicle</span>
+              <p className="font-semibold">{ticket.vehicle}</p>
+            </div>
 
-          {/* Service Details */}
-          <div>
-            <p className="text-sm text-gray-600 font-semibold mb-2">SERVICE DETAILS</p>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-lg">
+            {/* Customer info */}
+            {ticket.customer_name && (
+              <div>
+                <span className="text-sm text-gray-500">Customer</span>
+                <p className="font-semibold">
+                  {ticket.customer_name}
+                  {ticket.customer_phone ? ` • ${ticket.customer_phone}` : ''}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <span className="text-sm text-gray-500">Service Details</span>
+              <p className="font-semibold">
                 {getServiceDataText(ticket.service_type, ticket.service_data)}
               </p>
             </div>
-          </div>
 
-          {/* Notes */}
-          {ticket.notes && (
-            <div>
-              <p className="text-sm text-gray-600 font-semibold mb-2">NOTES</p>
-              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-                <p className="text-gray-800">{ticket.notes}</p>
+            {ticket.notes && (
+              <div>
+                <span className="text-sm text-gray-500">Notes</span>
+                <p className="font-semibold">{ticket.notes}</p>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Technician Selection */}
-          <div className="border-t pt-6">
-            <label className="label">Completed By</label>
-            <select
-              value={selectedTech}
-              onChange={(e) => setSelectedTech(e.target.value)}
-              className="input"
-            >
-              <option value="">Select Technician</option>
-              {technicians.map((tech) => (
-                <option key={tech.id} value={tech.id}>
-                  {tech.name}
-                </option>
-              ))}
-            </select>
+            {ticket.scheduled_time && (
+              <div>
+                <span className="text-sm text-gray-500">Scheduled</span>
+                <p className="font-semibold">{formatDateTime(ticket.scheduled_time)}</p>
+              </div>
+            )}
+
+            <div>
+              <span className="text-sm text-gray-500">Created</span>
+              <p className="font-semibold">{formatDateTime(ticket.created_at)}</p>
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-4">
-            <button onClick={onClose} className="btn-secondary flex-1">
-              Cancel
-            </button>
+          {/* FIX 2A: No technician dropdown — auto-assigned */}
+          <div className="pt-4 space-y-3">
             <button
               onClick={handleComplete}
-              disabled={loading || !selectedTech}
-              className="btn-success flex-1 text-xl"
+              disabled={loading}
+              className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
             >
               {loading ? (
                 <span className="flex items-center justify-center">

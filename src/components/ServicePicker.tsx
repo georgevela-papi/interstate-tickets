@@ -16,6 +16,7 @@ const SERVICE_ICONS: Record<ServiceType, string> = {
   USED_TIRES: '♻️',
   DETAILING: '✨',
   APPOINTMENT: '📅',
+  MAINTENANCE: '🛠️',
 };
 
 export default function ServicePicker({ selectedService, onSelect }: ServicePickerProps) {
