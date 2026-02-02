@@ -5,10 +5,9 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'interstatetire.online',
-        pathname: '/**',
       },
     ],
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
