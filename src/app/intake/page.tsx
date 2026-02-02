@@ -35,9 +35,10 @@ export default function IntakePage() {
     serviceData: any;
     scheduledTime: string | null;
     notes: string;
+    customerName: string;
+    customerPhone: string;
   }) => {
     try {
-      // Get staff ID
       const { data: staff } = await supabase
         .from('staff')
         .select('id')
@@ -53,6 +54,8 @@ export default function IntakePage() {
           service_data: data.serviceData,
           notes: data.notes,
           scheduled_time: data.scheduledTime,
+          customer_name: data.customerName,
+          customer_phone: data.customerPhone,
           created_by: staff?.id,
         })
         .select('ticket_number')
@@ -60,12 +63,9 @@ export default function IntakePage() {
 
       if (error) throw error;
 
-      // Show success toast
       setToastMessage(`Ticket #${ticket.ticket_number} created!`);
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
-
-      // Reset form
       setSelectedService(null);
     } catch (error) {
       console.error('Error creating ticket:', error);
@@ -91,7 +91,7 @@ export default function IntakePage() {
                 />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">New Job Ticket</h1>
+                <h1 className="text-2xl font-bold">Create Ticket</h1>
                 <p className="text-sm text-sky-100">Logged in as {session.name}</p>
               </div>
             </div>
@@ -107,53 +107,40 @@ export default function IntakePage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="card">
-            {!selectedService ? (
-              <ServicePicker
-                selectedService={selectedService}
-                onSelect={setSelectedService}
-              />
-            ) : (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">
-                    {selectedService.replace(/_/g, ' ')}
-                  </h2>
-                  <button
-                    onClick={() => setSelectedService(null)}
-                    className="text-gray-600 hover:text-gray-800 font-semibold"
-                  >
-                    ← Change Service
-                  </button>
-                </div>
-                <DynamicServiceForm
-                  serviceType={selectedService}
-                  onSubmit={handleSubmit}
-                  onCancel={() => setSelectedService(null)}
-                />
+        <div className="max-w-3xl mx-auto">
+          {!selectedService ? (
+            <ServicePicker
+              selectedService={selectedService}
+              onSelect={setSelectedService}
+            />
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {selectedService.replace(/_/g, ' ')}
+                </h2>
+                <button
+                  onClick={() => setSelectedService(null)}
+                  className="text-gray-600 hover:text-gray-800 font-semibold"
+                >
+                  ← Change Service
+                </button>
               </div>
-            )}
-          </div>
+              <DynamicServiceForm
+                serviceType={selectedService}
+                onSubmit={handleSubmit}
+                onCancel={() => setSelectedService(null)}
+              />
+            </div>
+          )}
         </div>
       </main>
 
-      {/* Toast Notification */}
       {showToast && (
         <div className="fixed top-4 right-4 z-50 toast-enter">
           <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center space-x-3">
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="font-semibold">{toastMessage}</span>
           </div>
