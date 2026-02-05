@@ -18,6 +18,7 @@ interface CompletedTicket {
   completed_by: string | null;
   excluded_from_metrics: boolean;
   technician_name?: string;
+  customer_name: string | null;
 }
 
 export default function CompletedJobsManager() {
@@ -26,13 +27,15 @@ export default function CompletedJobsManager() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editVehicle, setEditVehicle] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCompletedAt, setEditCompletedAt] = useState('');
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
     try {
       const { data: completedTickets } = await supabase
         .from('tickets')
-        .select('id, ticket_number, service_type, priority, vehicle, notes, completed_at, created_at, completed_by, excluded_from_metrics')
+        .select('id, ticket_number, service_type, priority, vehicle, notes, completed_at, created_at, completed_by, excluded_from_metrics, customer_name')
         .eq('status', 'COMPLETED')
         .order('completed_at', { ascending: false })
         .limit(100);
@@ -52,6 +55,7 @@ export default function CompletedJobsManager() {
         ...t,
         excluded_from_metrics: t.excluded_from_metrics || false,
         technician_name: t.completed_by ? techMap.get(t.completed_by) || 'Unknown' : 'N/A',
+        customer_name: t.customer_name || null,
       }));
 
       setTickets(rows);
@@ -88,6 +92,15 @@ export default function CompletedJobsManager() {
     setEditingId(ticket.id);
     setEditVehicle(ticket.vehicle);
     setEditNotes(ticket.notes || '');
+    setEditCustomerName(ticket.customer_name || '');
+    // Format datetime for datetime-local input (YYYY-MM-DDTHH:mm)
+    if (ticket.completed_at) {
+      const dt = new Date(ticket.completed_at);
+      const formatted = dt.toISOString().slice(0, 16);
+      setEditCompletedAt(formatted);
+    } else {
+      setEditCompletedAt('');
+    }
   };
 
   const handleSaveEdit = async (ticketId: string) => {
@@ -97,6 +110,8 @@ export default function CompletedJobsManager() {
         .update({
           vehicle: editVehicle.trim(),
           notes: editNotes.trim() || null,
+          customer_name: editCustomerName.trim() || null,
+          completed_at: editCompletedAt ? new Date(editCompletedAt).toISOString() : null,
         })
         .eq('id', ticketId);
       if (error) throw error;
@@ -161,19 +176,46 @@ export default function CompletedJobsManager() {
                     <span className="font-bold text-gray-800">#{ticket.ticket_number}</span>
                     <span>{SERVICE_TYPE_LABELS[ticket.service_type]}</span>
                   </div>
-                  <input
-                    type="text"
-                    value={editVehicle}
-                    onChange={(e) => setEditVehicle(e.target.value)}
-                    className="input"
-                    placeholder="Vehicle"
-                  />
-                  <textarea
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    className="input min-h-[60px]"
-                    placeholder="Notes (optional)"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Customer Name</label>
+                      <input
+                        type="text"
+                        value={editCustomerName}
+                        onChange={(e) => setEditCustomerName(e.target.value)}
+                        className="input"
+                        placeholder="Customer name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Completed At</label>
+                      <input
+                        type="datetime-local"
+                        value={editCompletedAt}
+                        onChange={(e) => setEditCompletedAt(e.target.value)}
+                        className="input"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Vehicle</label>
+                    <input
+                      type="text"
+                      value={editVehicle}
+                      onChange={(e) => setEditVehicle(e.target.value)}
+                      className="input"
+                      placeholder="Vehicle"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Notes</label>
+                    <textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      className="input min-h-[60px]"
+                      placeholder="Notes (optional)"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleSaveEdit(ticket.id)}
@@ -211,6 +253,7 @@ export default function CompletedJobsManager() {
                       )}
                     </div>
                     <p className={`text-gray-700 ${ticket.excluded_from_metrics ? 'line-through' : ''}`}>
+                      {ticket.customer_name && <span className="font-medium">{ticket.customer_name} — </span>}
                       {ticket.vehicle}
                     </p>
                     <p className="text-xs text-gray-400">
