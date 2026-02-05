@@ -2,10 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Brand CSS Variables (set dynamically by BrandProvider) */
+:root {
+  --brand-primary: #0EA5E9;
+  --brand-secondary: #0284C7;
+}
+
 @layer components {
   .btn-primary {
-    @apply bg-sky-500 hover:bg-sky-600 text-white px-6 py-3 rounded-lg font-semibold
+    @apply text-white px-6 py-3 rounded-lg font-semibold
     transition-colors shadow-md hover:shadow-lg active:scale-95;
+    background-color: var(--brand-primary);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--brand-secondary);
+  }
+
+  .text-brand {
+    color: var(--brand-primary);
+  }
+
+  .bg-brand {
+    background-color: var(--brand-primary);
+  }
+
+  .bg-brand-secondary {
+    background-color: var(--brand-secondary);
+  }
+
+  .border-brand {
+    border-color: var(--brand-primary);
   }
 
   .btn-secondary {
@@ -45,7 +72,13 @@
 }
 
 .spinner {
-  @apply inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full;
+  @apply inline-block w-8 h-8 border-2 border-gray-300 rounded-full;
+  border-top-color: var(--brand-primary);
+  animation: spin 0.6s linear infinite;
+}
+
+.spinner-small {
+  @apply inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full;
   animation: spin 0.6s linear infinite;
 }
 
