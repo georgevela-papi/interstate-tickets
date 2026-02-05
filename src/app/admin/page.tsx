@@ -6,11 +6,12 @@ import { getSession, clearSession } from '@/lib/supabase';
 import TechnicianManager from '@/components/TechnicianManager';
 import ReportsDashboard from '@/components/ReportsDashboard';
 import CompletedJobsManager from '@/components/CompletedJobsManager';
+import CustomerSearch from '@/components/CustomerSearch';
 import Image from 'next/image';
 
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'completed'>('technicians');
+  const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'completed' | 'customers'>('technicians');
   const router = useRouter();
 
   useEffect(() => {
@@ -116,6 +117,19 @@ export default function AdminPage() {
             >
               Completed Jobs
             </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`
+                py-4 px-2 border-b-2 font-semibold transition-colors
+                ${
+                  activeTab === 'customers'
+                    ? 'border-sky-500 text-sky-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }
+              `}
+            >
+              Customers
+            </button>
           </div>
         </div>
       </div>
@@ -129,8 +143,10 @@ export default function AdminPage() {
             </div>
           ) : activeTab === 'reports' ? (
             <ReportsDashboard />
-          ) : (
+          ) : activeTab === 'completed' ? (
             <CompletedJobsManager />
+          ) : (
+            <CustomerSearch />
           )}
         </div>
       </main>

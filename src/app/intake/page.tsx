@@ -1,20 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, getSession, clearSession } from '@/lib/supabase';
 import ServicePicker from '@/components/ServicePicker';
 import DynamicServiceForm from '@/components/DynamicServiceForm';
 import type { ServiceType } from '@/lib/types';
+import { formatPhone } from '@/lib/types';
+import { normalizePhone } from '@/lib/utils';
 import Image from 'next/image';
 
-export default function IntakePage() {
+function IntakeContent() {
   const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
   const [session, setSession] = useState<any>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const currentSession = getSession();
@@ -25,9 +31,36 @@ export default function IntakePage() {
     setSession(currentSession);
   }, [router]);
 
+  // Load customer from query param
+  useEffect(() => {
+    const cid = searchParams.get('customer_id');
+    if (cid) {
+      setCustomerId(cid);
+      supabase
+        .from('customers')
+        .select('name, phone_raw, last_vehicle_text')
+        .eq('id', cid)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setCustomerName(data.name);
+            setCustomerPhone(data.phone_raw);
+          }
+        });
+    }
+  }, [searchParams]);
+
   const handleLogout = () => {
     clearSession();
     router.push('/');
+  };
+
+  const handleRemoveCustomer = () => {
+    setCustomerId(null);
+    setCustomerName(null);
+    setCustomerPhone(null);
+    // Remove query param from URL without navigation
+    router.replace('/intake');
   };
 
   const handleSubmit = async (data: {
@@ -47,6 +80,42 @@ export default function IntakePage() {
         .eq('id_code', session.idCode)
         .single();
 
+      let finalCustomerId = customerId;
+
+      // Auto-create customer from appointment data if no customer linked
+      if (!finalCustomerId && data.serviceData.customer_name && data.serviceData.phone) {
+        const phoneNormalized = normalizePhone(data.serviceData.phone);
+
+        // Try to find existing customer by phone
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('phone_normalized', phoneNormalized)
+          .maybeSingle();
+
+        if (existing) {
+          finalCustomerId = existing.id;
+          // Update their last_vehicle_text
+          await supabase
+            .from('customers')
+            .update({ last_vehicle_text: data.vehicle })
+            .eq('id', existing.id);
+        } else {
+          // Create new customer
+          const { data: newCustomer } = await supabase
+            .from('customers')
+            .insert({
+              name: data.serviceData.customer_name,
+              phone_raw: data.serviceData.phone,
+              phone_normalized: phoneNormalized,
+              last_vehicle_text: data.vehicle,
+            })
+            .select('id')
+            .single();
+          if (newCustomer) finalCustomerId = newCustomer.id;
+        }
+      }
+
       const { data: ticket, error } = await supabase
         .from('tickets')
         .insert({
@@ -57,11 +126,20 @@ export default function IntakePage() {
           notes: data.notes,
           scheduled_time: data.scheduledTime,
           created_by: staff?.id,
+          customer_id: finalCustomerId || null,
         })
         .select('ticket_number')
         .single();
 
       if (error) throw error;
+
+      // Update customer's last_vehicle_text if we have a linked customer
+      if (finalCustomerId && !data.serviceData.customer_name) {
+        await supabase
+          .from('customers')
+          .update({ last_vehicle_text: data.vehicle })
+          .eq('id', finalCustomerId);
+      }
 
       // Show success toast
       setToastMessage(`Ticket #${ticket.ticket_number} created!`);
@@ -70,6 +148,10 @@ export default function IntakePage() {
 
       // Reset form
       setSelectedService(null);
+      // Clear customer if it came from query params
+      if (searchParams.get('customer_id')) {
+        handleRemoveCustomer();
+      }
     } catch (error) {
       console.error('Error creating ticket:', error);
       alert('Failed to create ticket. Please try again.');
@@ -113,6 +195,28 @@ export default function IntakePage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
+          {/* Customer Banner */}
+          {customerName && (
+            <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <span className="text-sky-800 font-semibold">
+                  Customer: {customerName}
+                </span>
+                {customerPhone && (
+                  <span className="text-sky-600 ml-2 text-sm">
+                    ({formatPhone(customerPhone)})
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleRemoveCustomer}
+                className="text-sky-600 text-sm hover:underline"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+
           <div className="card">
             {!selectedService ? (
               <ServicePicker
@@ -165,5 +269,13 @@ export default function IntakePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function IntakePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="spinner"></div></div>}>
+      <IntakeContent />
+    </Suspense>
   );
 }

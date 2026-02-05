@@ -225,7 +225,12 @@ export function suggestIdCode(role: 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER')
     TECHNICIAN: 'T',
     MANAGER: 'M',
   }[role];
-  
+
   const num = String(Math.floor(Math.random() * 90) + 10);
   return `${prefix}${num}`;
+}
+
+// Normalize phone number to digits only for storage/matching
+export function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
 }

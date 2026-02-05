@@ -32,6 +32,27 @@ export interface Technician {
   created_at: string;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone_raw: string | null;
+  phone_normalized: string | null;
+  last_vehicle_text: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerSearchResult {
+  id: string;
+  name: string;
+  phone_raw: string | null;
+  phone_normalized: string | null;
+  last_vehicle_text: string | null;
+  created_at: string;
+  last_visit_date: string | null;
+  total_visits: number;
+}
+
 export interface Ticket {
   id: string;
   ticket_number: number;
@@ -46,6 +67,7 @@ export interface Ticket {
   completed_at: string | null;
   created_at: string;
   created_by: string | null;
+  customer_id: string | null;
 }
 
 export interface ActiveQueueItem {
