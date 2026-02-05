@@ -1,226 +1,210 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import type { StaffRole } from '@/lib/types';
 
-interface StaffTech {
-  id: string;         // technician.id
-  staff_id: string;
+interface TechWithStaff {
+  id: string;
+  staff_id: string | null;
   name: string;
   active: boolean;
-  id_code: string;    // from staff table
+  created_at: string;
+  staff?: {
+    id: string;
+    id_code: string;
+    role: StaffRole;
+  } | null;
 }
 
-interface TechnicianManagerProps {
-  technicians: StaffTech[];
-  onUpdate: () => void;
-}
-
-export default function TechnicianManager({ technicians, onUpdate }: TechnicianManagerProps) {
+export default function TechnicianManager() {
+  const [technicians, setTechnicians] = useState<TechWithStaff[]>([]);
   const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState<StaffRole>('TECHNICIAN');
   const [newIdCode, setNewIdCode] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editIdCode, setEditIdCode] = useState('');
-  const [savingEdit, setSavingEdit] = useState(false);
 
-  const handleAdd = async () => {
-    if (!newName.trim() || !newIdCode.trim()) {
-      alert('Name and ID Code are required');
-      return;
-    }
+  useEffect(() => {
+    loadTechnicians();
+    generateIdCode('TECHNICIAN').then(setNewIdCode);
+  }, []);
 
+  const loadTechnicians = async () => {
+    const { data } = await supabase
+      .from('technicians')
+      .select('*, staff:staff_id(id, id_code, role)')
+      .order('name');
+    if (data) setTechnicians(data as TechWithStaff[]);
+  };
+
+  const generateIdCode = async (role: string) => {
+    const prefix = role === 'TECHNICIAN' ? 'T' : role === 'SERVICE_WRITER' ? 'SW' : 'M';
+    const { data: existing } = await supabase
+      .from('staff')
+      .select('id_code')
+      .like('id_code', `${prefix}%`);
+    const num = (existing?.length || 0) + 1;
+    return `${prefix}${String(num).padStart(2, '0')}`;
+  };
+
+  const handleRoleChange = async (role: StaffRole) => {
+    setNewRole(role);
+    const code = await generateIdCode(role);
+    setNewIdCode(code);
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !newIdCode.trim()) return;
     setAdding(true);
     try {
-      // Check if id_code already exists
-      const { data: existing } = await supabase
-        .from('staff')
-        .select('id')
-        .eq('id_code', newIdCode.toUpperCase())
-        .maybeSingle();
-
-      if (existing) {
-        alert(`ID Code "${newIdCode.toUpperCase()}" is already in use.`);
-        setAdding(false);
-        return;
-      }
-
-      // Create staff record
-      const { data: staff, error: staffError } = await supabase
+      // Create staff record first
+      const { data: staffRecord, error: staffError } = await supabase
         .from('staff')
         .insert({
-          id_code: newIdCode.toUpperCase(),
           name: newName.trim(),
-          role: 'TECHNICIAN',
+          role: newRole,
+          id_code: newIdCode.trim(),
+          active: true,
         })
-        .select()
+        .select('id')
         .single();
-
       if (staffError) throw staffError;
 
       // Create technician record linked to staff
       const { error: techError } = await supabase
         .from('technicians')
         .insert({
-          staff_id: staff.id,
           name: newName.trim(),
+          staff_id: staffRecord.id,
+          active: true,
         });
-
       if (techError) throw techError;
 
       setNewName('');
-      setNewIdCode('');
-      onUpdate();
-    } catch (error) {
-      console.error('Error adding technician:', error);
-      alert('Failed to add technician.');
+      setNewRole('TECHNICIAN');
+      const code = await generateIdCode('TECHNICIAN');
+      setNewIdCode(code);
+      loadTechnicians();
+    } catch (error: any) {
+      console.error('Error adding staff member:', error);
+      alert(error.message || 'Failed to add staff member');
     } finally {
       setAdding(false);
     }
   };
 
-  // FIX 3B: Soft delete — set active = false on both staff and technician
-  const handleToggleActive = async (techId: string, staffId: string, currentlyActive: boolean) => {
+  const handleSaveIdCode = async (staffId: string) => {
+    if (!editIdCode.trim()) return;
     try {
-      const newActive = !currentlyActive;
+      const { error } = await supabase
+        .from('staff')
+        .update({ id_code: editIdCode.trim() })
+        .eq('id', staffId);
+      if (error) throw error;
+      setEditingId(null);
+      loadTechnicians();
+    } catch (error: any) {
+      console.error('Error updating ID code:', error);
+      alert(error.message || 'Failed to update ID code');
+    }
+  };
 
-      // Update technician
+  const handleToggleActive = async (tech: TechWithStaff) => {
+    try {
+      const newActive = !tech.active;
       const { error: techError } = await supabase
         .from('technicians')
         .update({ active: newActive })
-        .eq('id', techId);
-
+        .eq('id', tech.id);
       if (techError) throw techError;
 
-      // Update staff (so login is blocked too) — FIX 2B
-      if (staffId) {
-        const { error: staffError } = await supabase
+      if (tech.staff_id) {
+        await supabase
           .from('staff')
           .update({ active: newActive })
-          .eq('id', staffId);
-
-        if (staffError) throw staffError;
+          .eq('id', tech.staff_id);
       }
-
-      onUpdate();
+      loadTechnicians();
     } catch (error) {
       console.error('Error toggling technician:', error);
       alert('Failed to update technician status.');
     }
   };
 
-  // FIX 3B: "Delete" performs soft delete (deactivate) to preserve history
-  const handleDelete = async (techId: string, staffId: string, name: string) => {
-    if (!confirm(`Deactivate ${name}? They will no longer be able to log in. Historical job data will be preserved.`)) {
-      return;
-    }
-
+  const handleDelete = async (tech: TechWithStaff) => {
+    if (!confirm(`Deactivate ${tech.name}? They will no longer appear in active lists.`)) return;
     try {
-      // Soft delete: set active = false
       const { error: techError } = await supabase
         .from('technicians')
         .update({ active: false })
-        .eq('id', techId);
-
+        .eq('id', tech.id);
       if (techError) throw techError;
 
-      if (staffId) {
-        const { error: staffError } = await supabase
+      if (tech.staff_id) {
+        await supabase
           .from('staff')
           .update({ active: false })
-          .eq('id', staffId);
-
-        if (staffError) throw staffError;
+          .eq('id', tech.staff_id);
       }
-
-      onUpdate();
+      loadTechnicians();
     } catch (error) {
-      console.error('Error deleting technician:', error);
-      alert('Failed to delete technician.');
-    }
-  };
-
-  // FIX 3A: Edit ID Code
-  const handleStartEdit = (techId: string, currentCode: string) => {
-    setEditingId(techId);
-    setEditIdCode(currentCode);
-  };
-
-  const handleSaveIdCode = async (staffId: string) => {
-    if (!editIdCode.trim()) {
-      alert('ID Code cannot be empty');
-      return;
-    }
-
-    setSavingEdit(true);
-    try {
-      // Check uniqueness
-      const { data: existing } = await supabase
-        .from('staff')
-        .select('id')
-        .eq('id_code', editIdCode.toUpperCase())
-        .neq('id', staffId)
-        .maybeSingle();
-
-      if (existing) {
-        alert(`ID Code "${editIdCode.toUpperCase()}" is already in use.`);
-        setSavingEdit(false);
-        return;
-      }
-
-      const { error } = await supabase
-        .from('staff')
-        .update({ id_code: editIdCode.toUpperCase() })
-        .eq('id', staffId);
-
-      if (error) throw error;
-
-      setEditingId(null);
-      setEditIdCode('');
-      onUpdate();
-    } catch (error) {
-      console.error('Error updating ID code:', error);
-      alert('Failed to update ID code.');
-    } finally {
-      setSavingEdit(false);
+      console.error('Error deactivating technician:', error);
+      alert('Failed to deactivate technician');
     }
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-6">Manage Technicians</h2>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Manage Technicians</h2>
+        <p className="text-gray-600 mb-6">
+          Add, edit, or deactivate staff members who use the system.
+        </p>
+      </div>
 
       {/* Add New */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Technician name"
-          className="input flex-1"
-          maxLength={50}
-        />
-        <input
-          type="text"
-          value={newIdCode}
-          onChange={(e) => setNewIdCode(e.target.value.toUpperCase())}
-          placeholder="ID Code (e.g. T04)"
-          className="input w-full sm:w-40"
-          maxLength={10}
-        />
+      <form onSubmit={handleAdd} className="bg-gray-50 rounded-lg p-4 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Name"
+            className="input"
+          />
+          <select
+            value={newRole}
+            onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
+            className="input"
+          >
+            <option value="TECHNICIAN">Technician</option>
+            <option value="SERVICE_WRITER">Service Writer</option>
+            <option value="MANAGER">Manager</option>
+          </select>
+          <input
+            type="text"
+            value={newIdCode}
+            onChange={(e) => setNewIdCode(e.target.value)}
+            placeholder="ID Code (e.g. T04)"
+            className="input"
+          />
+        </div>
         <button
-          onClick={handleAdd}
+          type="submit"
           disabled={adding || !newName.trim() || !newIdCode.trim()}
-          className="btn-primary whitespace-nowrap disabled:opacity-50"
+          className="btn-primary"
         >
-          {adding ? 'Adding...' : '+ Add Technician'}
+          {adding ? 'Adding...' : '+ Add Staff Member'}
         </button>
-      </div>
+      </form>
 
       {/* List */}
       <div className="space-y-3">
         {technicians.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No technicians configured yet.</p>
+          <p className="text-center text-gray-500 py-8">No staff members yet. Add one above.</p>
         ) : (
           technicians.map((tech) => (
             <div
@@ -229,66 +213,82 @@ export default function TechnicianManager({ technicians, onUpdate }: TechnicianM
                 tech.active ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-300 opacity-60'
               }`}
             >
-              <div className="mb-3 sm:mb-0">
-                <p className="font-semibold text-gray-800">{tech.name}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  {editingId === tech.id ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={editIdCode}
-                        onChange={(e) => setEditIdCode(e.target.value.toUpperCase())}
-                        className="input w-28 text-sm py-1"
-                        maxLength={10}
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleSaveIdCode(tech.staff_id)}
-                        disabled={savingEdit}
-                        className="text-sm text-green-600 hover:text-green-800 font-semibold"
-                      >
-                        {savingEdit ? '...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-sm text-gray-500 hover:text-gray-700"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-sm text-gray-500">Code: {tech.id_code}</span>
-                      <button
-                        onClick={() => handleStartEdit(tech.id, tech.id_code)}
-                        className="text-xs text-sky-600 hover:text-sky-800 font-semibold"
-                      >
-                        Edit
-                      </button>
-                    </>
-                  )}
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${tech.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {tech.active ? 'Active' : 'Inactive'}
-                  </span>
+              <div className="flex items-center space-x-4">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    tech.active ? 'bg-green-500' : 'bg-gray-400'
+                  }`}
+                />
+                <div>
+                  <p className={`text-lg font-semibold ${tech.active ? 'text-gray-800' : 'text-gray-500'}`}>
+                    {tech.name}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {editingId === tech.id && tech.staff_id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editIdCode}
+                          onChange={(e) => setEditIdCode(e.target.value)}
+                          className="border rounded px-2 py-0.5 text-sm w-20"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveIdCode(tech.staff_id!)}
+                          className="text-green-600 text-sm font-semibold"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="text-gray-400 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm text-gray-500">
+                          {tech.staff?.id_code || 'No ID'} · {tech.staff?.role?.replace('_', ' ') || 'TECHNICIAN'} · {tech.active ? 'Active' : 'Inactive'}
+                        </span>
+                        {tech.staff_id && (
+                          <button
+                            onClick={() => {
+                              setEditingId(tech.id);
+                              setEditIdCode(tech.staff?.id_code || '');
+                            }}
+                            className="text-sky-500 text-xs hover:underline"
+                          >
+                            Edit Code
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleToggleActive(tech.id, tech.staff_id, tech.active)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                    tech.active
-                      ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                      : 'bg-green-100 text-green-800 hover:bg-green-200'
-                  }`}
+                  onClick={() => handleToggleActive(tech)}
+                  className={`
+                    px-4 py-2 rounded-lg font-semibold transition-colors
+                    ${
+                      tech.active
+                        ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                        : 'bg-green-100 text-green-800 hover:bg-green-200'
+                    }
+                  `}
                 >
                   {tech.active ? 'Deactivate' : 'Activate'}
                 </button>
-                <button
-                  onClick={() => handleDelete(tech.id, tech.staff_id, tech.name)}
-                  className="px-4 py-2 bg-red-100 text-red-800 hover:bg-red-200 rounded-lg font-semibold transition-colors"
-                >
-                  Delete
-                </button>
+                {tech.active && (
+                  <button
+                    onClick={() => handleDelete(tech)}
+                    className="px-4 py-2 bg-red-100 text-red-800 hover:bg-red-200 rounded-lg font-semibold transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))

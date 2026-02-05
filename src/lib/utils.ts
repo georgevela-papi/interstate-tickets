@@ -100,8 +100,6 @@ export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
       ],
     },
   ],
-  // FIX 1B: Appointment now collects service being scheduled + date/time.
-  // Priority is NOT shown for Appointments (handled in DynamicServiceForm).
   APPOINTMENT: [
     {
       name: 'appointment_service',
@@ -109,6 +107,7 @@ export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
       type: 'select',
       required: true,
       options: [
+        { value: '', label: 'Select a service...' },
         { value: 'MOUNT_BALANCE', label: 'Mount/Balance' },
         { value: 'FLAT_REPAIR', label: 'Flat Repair' },
         { value: 'ROTATION', label: 'Rotation' },
@@ -131,7 +130,6 @@ export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
       required: true,
     },
   ],
-  // FIX 1A: Maintenance service type
   MAINTENANCE: [
     {
       name: 'maintenance_type',
@@ -215,19 +213,35 @@ export function getServiceDataText(serviceType: ServiceType, data: any): string 
     case 'USED_TIRES':
       return `${data.tire_size || '?'} × ${data.quantity || '?'}${data.brand ? ` (${data.brand})` : ''}`;
     case 'DETAILING':
-      return `${data.service_level || 'Standard'} detail`;
-    case 'APPOINTMENT': {
-      const svcLabel = data.appointment_service
-        ? (SERVICE_FIELDS.APPOINTMENT[0].options as any[])?.find(
-            (o: any) => (typeof o === 'string' ? o : o.value) === data.appointment_service
-          )
-        : null;
-      const svcName = svcLabel ? (typeof svcLabel === 'string' ? svcLabel : svcLabel.label) : data.appointment_service || 'General';
-      return `Appt: ${svcName}`;
-    }
+      return `${data.service_level || ''} Detail`;
     case 'MAINTENANCE':
-      return data.maintenance_type || 'General maintenance';
+      return data.maintenance_type || data.description || 'General maintenance';
+    case 'APPOINTMENT':
+      return `${data.customer_name || ''} - ${data.phone || ''}`;
     default:
       return '';
   }
+}
+
+// Check if appointment should be visible in queue
+export function shouldShowAppointment(scheduledTime: string | null): boolean {
+  if (!scheduledTime) return true;
+  return new Date(scheduledTime) <= new Date();
+}
+
+// Generate ID code suggestions for new staff
+export function suggestIdCode(role: 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER'): string {
+  const prefix = {
+    SERVICE_WRITER: 'SW',
+    TECHNICIAN: 'T',
+    MANAGER: 'M',
+  }[role];
+
+  const num = String(Math.floor(Math.random() * 90) + 10);
+  return `${prefix}${num}`;
+}
+
+// Normalize phone number to digits only for storage/matching
+export function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
 }

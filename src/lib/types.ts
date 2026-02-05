@@ -12,8 +12,8 @@ export type ServiceType =
   | 'NEW_TIRES'
   | 'USED_TIRES'
   | 'DETAILING'
-  | 'APPOINTMENT'
-  | 'MAINTENANCE';
+  | 'MAINTENANCE'
+  | 'APPOINTMENT';
 
 export interface Staff {
   id: string;
@@ -33,6 +33,27 @@ export interface Technician {
   created_at: string;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  phone_raw: string | null;
+  phone_normalized: string | null;
+  last_vehicle_text: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerSearchResult {
+  id: string;
+  name: string;
+  phone_raw: string | null;
+  phone_normalized: string | null;
+  last_vehicle_text: string | null;
+  created_at: string;
+  last_visit_date: string | null;
+  total_visits: number;
+}
+
 export interface Ticket {
   id: string;
   ticket_number: number;
@@ -49,7 +70,7 @@ export interface Ticket {
   completed_at: string | null;
   created_at: string;
   created_by: string | null;
-  excluded_from_metrics: boolean;
+  customer_id: string | null;
 }
 
 export interface ActiveQueueItem {
@@ -68,6 +89,16 @@ export interface ActiveQueueItem {
 }
 
 // Service-specific data types
+export type ServiceData =
+  | MountBalanceData
+  | FlatRepairData
+  | RotationData
+  | TireData
+  | DetailingData
+  | AppointmentData
+  | MaintenanceData
+  | Record<string, never>;
+
 export interface MountBalanceData {
   tire_count: number;
 }
@@ -91,9 +122,11 @@ export interface DetailingData {
 }
 
 export interface AppointmentData {
-  appointment_service: ServiceType;
+  customer_name: string;
+  phone: string;
   scheduled_date: string;
   scheduled_time: string;
+  appointment_service: ServiceType;
 }
 
 export interface MaintenanceData {
@@ -104,7 +137,7 @@ export interface MaintenanceData {
 export interface ServiceFieldConfig {
   name: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'radio' | 'textarea' | 'time' | 'tel' | 'date' | 'datetime-local';
+  type: 'text' | 'number' | 'select' | 'radio' | 'textarea' | 'time' | 'tel' | 'date';
   required: boolean;
   options?: string[] | { value: string; label: string }[];
   min?: number;
@@ -122,8 +155,8 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   NEW_TIRES: 'New Tires',
   USED_TIRES: 'Used Tires',
   DETAILING: 'Detailing',
-  APPOINTMENT: 'Appointment',
   MAINTENANCE: 'Maintenance',
+  APPOINTMENT: 'Appointment',
 };
 
 export const PRIORITY_LABELS: Record<PriorityLevel, string> = {

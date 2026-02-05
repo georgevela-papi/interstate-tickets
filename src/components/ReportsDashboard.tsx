@@ -99,11 +99,12 @@ export default function ReportsDashboard() {
       const rangeStart = getDateRangeStart();
       const rangeEnd = getDateRangeEnd();
 
-      // Fetch completed tickets with technician names
+      // Fetch completed tickets with technician names (exclude tickets marked as excluded_from_metrics)
       const { data: completedTickets } = await supabase
         .from('tickets')
-        .select('id, ticket_number, service_type, priority, status, vehicle, notes, completed_at, created_at, completed_by')
+        .select('id, ticket_number, service_type, priority, status, vehicle, notes, completed_at, created_at, completed_by, excluded_from_metrics')
         .eq('status', 'COMPLETED')
+        .neq('excluded_from_metrics', true)
         .gte('completed_at', rangeStart)
         .lt('completed_at', rangeEnd)
         .order('completed_at', { ascending: false });
@@ -156,11 +157,13 @@ export default function ReportsDashboard() {
           .from('tickets')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'COMPLETED')
+          .neq('excluded_from_metrics', true)
           .gte('completed_at', today),
         supabase
           .from('tickets')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'COMPLETED')
+          .neq('excluded_from_metrics', true)
           .gte('completed_at', weekStart.toISOString()),
         supabase.rpc('get_avg_completion_time'),
         supabase
@@ -312,6 +315,7 @@ export default function ReportsDashboard() {
     NEW_TIRES: 'bg-purple-500',
     USED_TIRES: 'bg-indigo-500',
     DETAILING: 'bg-pink-500',
+    MAINTENANCE: 'bg-teal-500',
     APPOINTMENT: 'bg-amber-500',
   };
 

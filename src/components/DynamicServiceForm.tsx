@@ -87,7 +87,7 @@ export default function DynamicServiceForm({
 
     // FIX 1B: Build scheduled_time from date + time for appointments
     let scheduledTime = null;
-    if (isAppointment && serviceData.scheduled_date && serviceData.scheduled_time) {
+    if (serviceType === 'APPOINTMENT' && serviceData.scheduled_date && serviceData.scheduled_time) {
       scheduledTime = `${serviceData.scheduled_date}T${serviceData.scheduled_time}:00`;
     }
 
@@ -112,7 +112,6 @@ export default function DynamicServiceForm({
       case 'tel':
       case 'time':
       case 'date':
-      case 'datetime-local':
         return (
           <div key={field.name}>
             <label className="label">{field.label}</label>
@@ -282,8 +281,8 @@ export default function DynamicServiceForm({
         />
       </div>
 
-      {/* ── FIX 1B: Priority hidden for Appointments ── */}
-      {!isAppointment && (
+      {/* Priority - hidden for appointments */}
+      {serviceType !== 'APPOINTMENT' && (
         <div>
           <label className="label">Priority</label>
           <div className="grid grid-cols-3 gap-3">
@@ -292,15 +291,18 @@ export default function DynamicServiceForm({
                 key={p}
                 type="button"
                 onClick={() => setPriority(p)}
-                className={`py-3 px-4 rounded-lg border-2 font-semibold transition-all ${
-                  priority === p
-                    ? p === 'HIGH'
-                      ? 'bg-red-600 border-red-700 text-white'
-                      : p === 'NORMAL'
-                      ? 'bg-sky-500 border-sky-600 text-white'
-                      : 'bg-blue-500 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
-                }`}
+                className={`
+                  py-3 px-4 rounded-lg border-2 font-semibold transition-all
+                  ${
+                    priority === p
+                      ? p === 'HIGH'
+                        ? 'bg-red-600 border-red-700 text-white'
+                        : p === 'NORMAL'
+                        ? 'bg-sky-500 border-sky-600 text-white'
+                        : 'bg-blue-500 border-blue-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                  }
+                `}
               >
                 {PRIORITY_LABELS[p]}
               </button>
