@@ -83,9 +83,9 @@ function IntakeContent() {
 
       let finalCustomerId = customerId;
 
-      // Auto-create customer from appointment data if no customer linked
-      if (!finalCustomerId && data.serviceData.customer_name && data.serviceData.phone) {
-        const phoneNormalized = normalizePhone(data.serviceData.phone);
+      // Auto-create customer from form data if no customer linked
+      if (!finalCustomerId && data.customerName && data.customerPhone) {
+        const phoneNormalized = normalizePhone(data.customerPhone);
 
         // Try to find existing customer by phone
         const { data: existing } = await supabase
@@ -106,8 +106,8 @@ function IntakeContent() {
           const { data: newCustomer } = await supabase
             .from('customers')
             .insert({
-              name: data.serviceData.customer_name,
-              phone_raw: data.serviceData.phone,
+              name: data.customerName,
+              phone_raw: data.customerPhone,
               phone_normalized: phoneNormalized,
               last_vehicle_text: data.vehicle,
             })
@@ -136,8 +136,8 @@ function IntakeContent() {
 
       if (error) throw error;
 
-      // Update customer's last_vehicle_text if we have a linked customer
-      if (finalCustomerId && !data.serviceData.customer_name) {
+      // Update customer's last_vehicle_text if using pre-linked customer from query params
+      if (customerId && finalCustomerId === customerId) {
         await supabase
           .from('customers')
           .update({ last_vehicle_text: data.vehicle })
