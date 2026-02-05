@@ -9,25 +9,6 @@ import CompletedJobsManager from '@/components/CompletedJobsManager';
 import CustomerSearch from '@/components/CustomerSearch';
 import Image from 'next/image';
 
-interface KPIData {
-  totalToday: number;
-  totalThisWeek: number;
-  avgTimeMinutes: number;
-  pendingCount: number;
-}
-
-interface ServiceBreakdown { service_type: string; count: number; }
-interface TechPerformance { name: string; count: number; avg_minutes: number; }
-interface CompletedTicket {
-  id: string;
-  ticket_number: number;
-  service_type: string;
-  vehicle: string;
-  customer_name: string | null;
-  completed_at: string;
-  excluded_from_metrics: boolean;
-}
-
 export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'completed' | 'customers'>('technicians');
@@ -45,22 +26,6 @@ export default function AdminPage() {
   const handleLogout = () => {
     clearSession();
     router.push('/');
-  };
-
-  const exportCSV = () => {
-    const headers = ['Service Type', 'Count'];
-    const rows = serviceBreakdown.map(s => [
-      (SERVICE_TYPE_LABELS as any)[s.service_type] || s.service_type,
-      s.count,
-    ]);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `interstate-report-${reportPeriod}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   if (!session) return null;
@@ -123,59 +88,47 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Tabs — TEAM MANAGEMENT: "Manage Technicians" → "Team" */}
+      {/* Tabs */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4">
           <div className="flex space-x-6 overflow-x-auto">
-            {(['team', 'reports', 'tickets'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`py-4 px-2 border-b-2 font-semibold transition-colors whitespace-nowrap ${
-                  activeTab === tab
-                    ? 'border-sky-500 text-sky-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }
-              `}
+            <button
+              onClick={() => setActiveTab('technicians')}
+              className={`py-4 px-2 border-b-2 font-semibold transition-colors whitespace-nowrap ${
+                activeTab === 'technicians'
+                  ? 'border-sky-500 text-sky-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
               Manage Technicians
             </button>
             <button
               onClick={() => setActiveTab('reports')}
-              className={`
-                py-4 px-2 border-b-2 font-semibold transition-colors
-                ${
-                  activeTab === 'reports'
-                    ? 'border-sky-500 text-sky-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }
-              `}
+              className={`py-4 px-2 border-b-2 font-semibold transition-colors whitespace-nowrap ${
+                activeTab === 'reports'
+                  ? 'border-sky-500 text-sky-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
               Reports & KPIs
             </button>
             <button
               onClick={() => setActiveTab('completed')}
-              className={`
-                py-4 px-2 border-b-2 font-semibold transition-colors
-                ${
-                  activeTab === 'completed'
-                    ? 'border-sky-500 text-sky-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }
-              `}
+              className={`py-4 px-2 border-b-2 font-semibold transition-colors whitespace-nowrap ${
+                activeTab === 'completed'
+                  ? 'border-sky-500 text-sky-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
               Completed Jobs
             </button>
             <button
               onClick={() => setActiveTab('customers')}
-              className={`
-                py-4 px-2 border-b-2 font-semibold transition-colors
-                ${
-                  activeTab === 'customers'
-                    ? 'border-sky-500 text-sky-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }
-              `}
+              className={`py-4 px-2 border-b-2 font-semibold transition-colors whitespace-nowrap ${
+                activeTab === 'customers'
+                  ? 'border-sky-500 text-sky-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
             >
               Customers
             </button>
@@ -186,18 +139,14 @@ export default function AdminPage() {
       {/* Content */}
       <main className="container mx-auto px-4 py-6 md:py-8">
         <div className="max-w-5xl mx-auto">
-          {/* ── TAB: Team (TEAM MANAGEMENT) ── */}
-          {activeTab === 'team' && (
+          {activeTab === 'technicians' && (
             <div className="card">
               <TechnicianManager />
             </div>
-          ) : activeTab === 'reports' ? (
-            <ReportsDashboard />
-          ) : activeTab === 'completed' ? (
-            <CompletedJobsManager />
-          ) : (
-            <CustomerSearch />
           )}
+          {activeTab === 'reports' && <ReportsDashboard />}
+          {activeTab === 'completed' && <CompletedJobsManager />}
+          {activeTab === 'customers' && <CustomerSearch />}
         </div>
       </main>
     </div>

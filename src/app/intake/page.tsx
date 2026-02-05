@@ -243,13 +243,8 @@ function IntakeContent() {
                   onCancel={() => setSelectedService(null)}
                 />
               </div>
-              <DynamicServiceForm
-                serviceType={selectedService}
-                onSubmit={handleSubmit}
-                onCancel={() => setSelectedService(null)}
-              />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
 

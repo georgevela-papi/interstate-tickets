@@ -130,10 +130,6 @@ export interface AppointmentData {
 }
 
 export interface MaintenanceData {
-  description: string;
-}
-
-export interface MaintenanceData {
   maintenance_type: string;
   description?: string;
 }
@@ -161,7 +157,6 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   DETAILING: 'Detailing',
   MAINTENANCE: 'Maintenance',
   APPOINTMENT: 'Appointment',
-  MAINTENANCE: 'Maintenance',
 };
 
 export const PRIORITY_LABELS: Record<PriorityLevel, string> = {

@@ -199,7 +199,7 @@ export default function TechnicianManager() {
         >
           {adding ? 'Adding...' : '+ Add Staff Member'}
         </button>
-      </div>
+      </form>
 
       {/* List */}
       <div className="space-y-3">
