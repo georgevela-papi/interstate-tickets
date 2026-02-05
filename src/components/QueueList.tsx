@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { ActiveQueueItem, PriorityLevel } from '@/lib/types';
 import { SERVICE_TYPE_LABELS } from '@/lib/types';
-import { formatTime, formatMinutes, getServiceDataText } from '@/lib/utils';
+import { getTimeElapsed, getServiceDataText } from '@/lib/utils';
 
 interface QueueListProps {
   tickets: ActiveQueueItem[];
@@ -23,7 +22,6 @@ const PRIORITY_ICONS: Record<PriorityLevel, string> = {
 };
 
 export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
-  // Group by priority
   const grouped = {
     HIGH: tickets.filter((t) => t.priority === 'HIGH'),
     NORMAL: tickets.filter((t) => t.priority === 'NORMAL'),
@@ -60,47 +58,32 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
                 <button
                   key={ticket.id}
                   onClick={() => onTicketClick(ticket)}
-                  className={`
-                    w-full text-left p-4 rounded-lg border-l-4 shadow-md transition-all
-                    hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]
-                    ${PRIORITY_COLORS[priority]}
-                  `}
+                  className={`w-full text-left p-4 rounded-lg border-l-4 shadow-sm hover:shadow-md transition-all ${PRIORITY_COLORS[priority]}`}
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-1">
-                        <span className="text-2xl font-bold text-gray-800">
-                          #{ticket.ticket_number}
-                        </span>
-                        <span className="px-3 py-1 bg-sky-500 text-white text-sm font-semibold rounded-full">
-                          {SERVICE_TYPE_LABELS[ticket.service_type]}
-                        </span>
-                      </div>
-                      <p className="text-lg font-semibold text-gray-700">
-                        {ticket.vehicle}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">
-                        {formatTime(ticket.created_at)}
-                      </p>
-                      <p className="text-xs font-semibold text-gray-600">
-                        ⏱ {formatMinutes(ticket.minutes_waiting)}
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-lg text-gray-800">
+                      #{ticket.ticket_number}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {getTimeElapsed(ticket.created_at)} ago
+                    </span>
                   </div>
-
-                  {/* Service Details */}
-                  <p className="text-gray-600">
-                    {getServiceDataText(ticket.service_type, ticket.service_data)}
-                  </p>
-
-                  {/* Notes */}
-                  {ticket.notes && (
-                    <p className="mt-2 text-sm text-gray-500 italic">
-                      Note: {ticket.notes}
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-700">{ticket.vehicle}</p>
+                      {ticket.customer_name && (
+                        <p className="text-sm text-gray-600">
+                          👤 {ticket.customer_name}
+                          {ticket.customer_phone ? ` • ${ticket.customer_phone}` : ''}
+                        </p>
+                      )}
+                      <p className="text-sm text-gray-500">
+                        {SERVICE_TYPE_LABELS[ticket.service_type]} •{' '}
+                        {getServiceDataText(ticket.service_type, ticket.service_data)}
+                      </p>
+                    </div>
+                    <span className="text-sky-500 font-semibold text-sm">View →</span>
+                  </div>
                 </button>
               ))}
             </div>

@@ -1,4 +1,5 @@
 // Type definitions for Interstate Tires Job Ticket System
+// Updated: Fix pass — adds MAINTENANCE, customer fields, metrics exclusion
 
 export type TicketStatus = 'PENDING' | 'COMPLETED';
 export type PriorityLevel = 'LOW' | 'NORMAL' | 'HIGH';
@@ -60,8 +61,10 @@ export interface Ticket {
   priority: PriorityLevel;
   status: TicketStatus;
   vehicle: string;
-  service_data: ServiceData;
+  service_data: any;
   notes: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
   scheduled_time: string | null;
   completed_by: string | null;
   completed_at: string | null;
@@ -76,8 +79,10 @@ export interface ActiveQueueItem {
   service_type: ServiceType;
   priority: PriorityLevel;
   vehicle: string;
-  service_data: ServiceData;
+  service_data: any;
   notes: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
   scheduled_time: string | null;
   created_at: string;
   minutes_waiting: number;
@@ -103,7 +108,7 @@ export interface FlatRepairData {
 }
 
 export interface RotationData {
-  pattern?: 'Forward' | 'X' | 'Rearward';
+  pattern?: string;
 }
 
 export interface TireData {
@@ -128,7 +133,11 @@ export interface MaintenanceData {
   description: string;
 }
 
-// Form field definitions
+export interface MaintenanceData {
+  maintenance_type: string;
+  description?: string;
+}
+
 export interface ServiceFieldConfig {
   name: string;
   label: string;
@@ -152,6 +161,7 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   DETAILING: 'Detailing',
   MAINTENANCE: 'Maintenance',
   APPOINTMENT: 'Appointment',
+  MAINTENANCE: 'Maintenance',
 };
 
 export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
@@ -166,15 +176,23 @@ export const PRIORITY_COLORS: Record<PriorityLevel, string> = {
   LOW: 'bg-blue-100 border-blue-500 text-blue-900',
 };
 
-// Validation functions
+// Services that can be booked as an appointment
+export const APPOINTABLE_SERVICES: { value: ServiceType; label: string }[] = [
+  { value: 'MOUNT_BALANCE', label: 'Mount/Balance' },
+  { value: 'FLAT_REPAIR', label: 'Flat Repair' },
+  { value: 'ROTATION', label: 'Rotation' },
+  { value: 'NEW_TIRES', label: 'New Tires' },
+  { value: 'USED_TIRES', label: 'Used Tires' },
+  { value: 'DETAILING', label: 'Detailing' },
+  { value: 'MAINTENANCE', label: 'Maintenance' },
+];
+
 export function validateTireSize(size: string): boolean {
-  // Format: 225/65R17 or 225/65/17
   const pattern = /^\d{3}\/\d{2}[R\/]\d{2}$/;
   return pattern.test(size);
 }
 
 export function validatePhone(phone: string): boolean {
-  // Format: 123-456-7890 or (123) 456-7890 or 1234567890
   const cleaned = phone.replace(/\D/g, '');
   return cleaned.length === 10;
 }

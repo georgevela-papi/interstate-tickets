@@ -129,8 +129,8 @@ export default function TechnicianManager() {
       }
       loadTechnicians();
     } catch (error) {
-      console.error('Error updating technician:', error);
-      alert('Failed to update technician');
+      console.error('Error toggling technician:', error);
+      alert('Failed to update technician status.');
     }
   };
 
@@ -199,7 +199,7 @@ export default function TechnicianManager() {
         >
           {adding ? 'Adding...' : '+ Add Staff Member'}
         </button>
-      </form>
+      </div>
 
       {/* List */}
       <div className="space-y-3">
@@ -209,10 +209,9 @@ export default function TechnicianManager() {
           technicians.map((tech) => (
             <div
               key={tech.id}
-              className={`
-                flex items-center justify-between p-4 rounded-lg border-2
-                ${tech.active ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-300'}
-              `}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border ${
+                tech.active ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-300 opacity-60'
+              }`}
             >
               <div className="flex items-center space-x-4">
                 <div
@@ -268,7 +267,6 @@ export default function TechnicianManager() {
                   </div>
                 </div>
               </div>
-
               <div className="flex gap-2">
                 <button
                   onClick={() => handleToggleActive(tech)}
