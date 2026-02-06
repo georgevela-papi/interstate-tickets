@@ -2,13 +2,15 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTenant } from '@/lib/tenant-context';
-import { saveSession } from '@/lib/supabase';
+import { saveSession, getSession } from '@/lib/supabase';
 
 /**
  * Root page - redirects based on authentication state.
  *
- * - Authenticated users → role-based dashboard
- * - Unauthenticated users → /login
+ * Priority:
+ * 1. If tenant context has staff → save session + route by role
+ * 2. If localStorage has valid session → route by role (PIN pad login)
+ * 3. Otherwise → /login
  */
 export default function HomePage() {
   const { staff, loading, isAuthenticated } = useTenant();
@@ -17,17 +19,26 @@ export default function HomePage() {
   useEffect(() => {
     if (loading) return;
 
-    if (!isAuthenticated || !staff) {
-      router.push('/login');
+    // Path 1: Full Supabase auth + staff context
+    if (isAuthenticated && staff) {
+      saveSession(staff.id, staff.name, staff.role);
+      routeByRole(staff.role);
       return;
     }
 
-    // Bridge: sync tenant-context auth into localStorage session
-    // so that downstream pages (admin, intake, queue) that use getSession() work
-    saveSession(staff.id, staff.name, staff.role);
+    // Path 2: localStorage session from PIN pad login
+    const localSession = getSession();
+    if (localSession) {
+      routeByRole(localSession.role);
+      return;
+    }
 
-    // Route based on role
-    switch (staff.role) {
+    // Path 3: Not authenticated at all
+    router.push('/login');
+  }, [loading, isAuthenticated, staff, router]);
+
+  function routeByRole(role: string) {
+    switch (role) {
       case 'SERVICE_WRITER':
         router.push('/intake');
         break;
@@ -40,12 +51,11 @@ export default function HomePage() {
       default:
         router.push('/login');
     }
-  }, [loading, isAuthenticated, staff, router]);
+  }
 
-  // Show loading spinner during redirect
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="spinner" />
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-500" />
     </div>
   );
 }
