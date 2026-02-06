@@ -30,6 +30,14 @@ function isValidUUID(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
+// Type for get_my_staff RPC response
+interface StaffInfo {
+  id: string;
+  tenant_id: string;
+  role: string;
+  name: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // ========================================
@@ -65,20 +73,18 @@ export async function POST(request: NextRequest) {
     // ========================================
     // 2. AUTHORIZATION: Verify caller is MANAGER
     // ========================================
-    const { data: callerProfile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, tenant_id, role')
-      .eq('id', user.id)
-      .single();
+    const { data: callerStaff, error: callerError } = await supabase
+      .rpc('get_my_staff')
+      .single() as { data: StaffInfo | null; error: Error | null };
 
-    if (profileError || !callerProfile) {
+    if (callerError || !callerStaff) {
       return NextResponse.json(
-        { error: 'Unauthorized: Profile not found' },
+        { error: 'Unauthorized: Not an active staff member' },
         { status: 401 }
       );
     }
 
-    if (callerProfile.role !== 'MANAGER') {
+    if (callerStaff.role !== 'MANAGER') {
       return NextResponse.json(
         { error: 'Forbidden: Only managers can invite staff' },
         { status: 403 }
@@ -153,9 +159,9 @@ export async function POST(request: NextRequest) {
     // ========================================
     // 7. CROSS-TENANT PROTECTION
     // ========================================
-    if (staff.tenant_id !== callerProfile.tenant_id) {
+    if (staff.tenant_id !== callerStaff.tenant_id) {
       // Log potential attack attempt
-      console.warn(`Cross-tenant invite attempt: user ${user.id} (tenant ${callerProfile.tenant_id}) tried to invite staff ${staffId} (tenant ${staff.tenant_id})`);
+      console.warn(`Cross-tenant invite attempt: user ${user.id} (tenant ${callerStaff.tenant_id}) tried to invite staff ${staffId} (tenant ${staff.tenant_id})`);
       return NextResponse.json(
         { error: 'Forbidden: Cannot invite staff from another business' },
         { status: 403 }
