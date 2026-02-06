@@ -1,289 +1,296 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { ServiceType, PriorityLevel } from '@/lib/types';
-import { SERVICE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/types';
-import { formatDateTime } from '@/lib/utils';
+import { SERVICE_LABELS, SERVICE_ICONS } from '@/lib/utils';
 
 interface CompletedTicket {
   id: string;
   ticket_number: number;
-  service_type: ServiceType;
-  priority: PriorityLevel;
+  service_type: string;
   vehicle: string;
+  customer_name: string | null;
+  customer_phone: string | null;
   notes: string | null;
-  completed_at: string | null;
+  completed_at: string;
   created_at: string;
   completed_by: string | null;
-  excluded_from_metrics: boolean;
   technician_name?: string;
-  customer_name: string | null;
+  excluded_from_metrics: boolean;
+}
+
+interface EditState {
+  customer_name: string;
+  vehicle: string;
+  notes: string;
+  completed_at_date: string;
+  completed_at_time: string;
 }
 
 export default function CompletedJobsManager() {
   const [tickets, setTickets] = useState<CompletedTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editVehicle, setEditVehicle] = useState('');
-  const [editNotes, setEditNotes] = useState('');
-  const [editCustomerName, setEditCustomerName] = useState('');
-  const [editCompletedAt, setEditCompletedAt] = useState('');
-
-  const loadTickets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: completedTickets } = await supabase
-        .from('tickets')
-        .select('id, ticket_number, service_type, priority, vehicle, notes, completed_at, created_at, completed_by, excluded_from_metrics, customer_name')
-        .eq('status', 'COMPLETED')
-        .order('completed_at', { ascending: false })
-        .limit(100);
-
-      const { data: technicians } = await supabase
-        .from('technicians')
-        .select('id, name');
-
-      const techMap = new Map<string, string>();
-      if (technicians) {
-        technicians.forEach((t: { id: string; name: string }) => {
-          techMap.set(t.id, t.name);
-        });
-      }
-
-      const rows: CompletedTicket[] = (completedTickets || []).map((t: any) => ({
-        ...t,
-        excluded_from_metrics: t.excluded_from_metrics || false,
-        technician_name: t.completed_by ? techMap.get(t.completed_by) || 'Unknown' : 'N/A',
-        customer_name: t.customer_name || null,
-      }));
-
-      setTickets(rows);
-    } catch (error) {
-      console.error('Error loading completed tickets:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadTickets();
-  }, [loadTickets]);
+    loadCompleted();
+  }, []);
 
-  const handleToggleExcluded = async (ticket: CompletedTicket) => {
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .update({ excluded_from_metrics: !ticket.excluded_from_metrics })
-        .eq('id', ticket.id);
-      if (error) throw error;
-      setTickets((prev) =>
-        prev.map((t) =>
-          t.id === ticket.id ? { ...t, excluded_from_metrics: !t.excluded_from_metrics } : t
-        )
+  const loadCompleted = async () => {
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('id, ticket_number, service_type, vehicle, customer_name, customer_phone, notes, completed_at, created_at, completed_by, excluded_from_metrics')
+      .eq('status', 'COMPLETED')
+      .order('completed_at', { ascending: false })
+      .limit(50);
+
+    if (!error && data) {
+      const techIds = data.filter((t) => t.completed_by).map((t) => t.completed_by);
+      let techMap: Record<string, string> = {};
+      if (techIds.length > 0) {
+        const { data: techs } = await supabase
+          .from('technicians')
+          .select('id, name')
+          .in('id', techIds);
+        if (techs) {
+          techMap = Object.fromEntries(techs.map((t) => [t.id, t.name]));
+        }
+      }
+
+      setTickets(
+        data.map((t) => ({
+          ...t,
+          technician_name: t.completed_by ? techMap[t.completed_by] || 'Unknown' : undefined,
+        }))
       );
-    } catch (error) {
-      console.error('Error toggling exclusion:', error);
-      alert('Failed to update ticket');
     }
+    setLoading(false);
   };
 
-  const handleStartEdit = (ticket: CompletedTicket) => {
+  const handleToggleExclude = async (id: string, currentExcluded: boolean) => {
+    await supabase.from('tickets').update({ excluded_from_metrics: !currentExcluded }).eq('id', id);
+    loadCompleted();
+  };
+
+  const startEdit = (ticket: CompletedTicket) => {
+    const dt = new Date(ticket.completed_at);
     setEditingId(ticket.id);
-    setEditVehicle(ticket.vehicle);
-    setEditNotes(ticket.notes || '');
-    setEditCustomerName(ticket.customer_name || '');
-    // Format datetime for datetime-local input (YYYY-MM-DDTHH:mm)
-    if (ticket.completed_at) {
-      const dt = new Date(ticket.completed_at);
-      const formatted = dt.toISOString().slice(0, 16);
-      setEditCompletedAt(formatted);
-    } else {
-      setEditCompletedAt('');
-    }
+    setEditState({
+      customer_name: ticket.customer_name || '',
+      vehicle: ticket.vehicle || '',
+      notes: ticket.notes || '',
+      completed_at_date: dt.toISOString().slice(0, 10),
+      completed_at_time: dt.toTimeString().slice(0, 5),
+    });
   };
 
-  const handleSaveEdit = async (ticketId: string) => {
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .update({
-          vehicle: editVehicle.trim(),
-          notes: editNotes.trim() || null,
-          customer_name: editCustomerName.trim() || null,
-          completed_at: editCompletedAt ? new Date(editCompletedAt).toISOString() : null,
-        })
-        .eq('id', ticketId);
-      if (error) throw error;
-      setEditingId(null);
-      loadTickets();
-    } catch (error) {
-      console.error('Error updating ticket:', error);
-      alert('Failed to update ticket');
-    }
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditState(null);
   };
 
-  const handleDeleteTicket = async (ticket: CompletedTicket) => {
-    if (!confirm(`Delete ticket #${ticket.ticket_number}? This cannot be undone.`)) return;
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .delete()
-        .eq('id', ticket.id);
-      if (error) throw error;
-      setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
-    } catch (error) {
-      console.error('Error deleting ticket:', error);
-      alert('Failed to delete ticket');
-    }
+  const saveEdit = async () => {
+    if (!editingId || !editState) return;
+    setSaving(true);
+
+    const completedAt = new Date(`${editState.completed_at_date}T${editState.completed_at_time}:00`).toISOString();
+
+    await supabase
+      .from('tickets')
+      .update({
+        customer_name: editState.customer_name || null,
+        vehicle: editState.vehicle,
+        notes: editState.notes || null,
+        completed_at: completedAt,
+      })
+      .eq('id', editingId);
+
+    setSaving(false);
+    cancelEdit();
+    loadCompleted();
+  };
+
+  const handleDelete = async (id: string) => {
+    await supabase.from('tickets').delete().eq('id', id);
+    setDeleteConfirmId(null);
+    loadCompleted();
   };
 
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="spinner"></div>
+        <div className="spinner" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">Completed Jobs</h2>
-        <p className="text-gray-600 text-sm">
-          Edit, delete, or exclude completed tickets from KPI metrics. Excluded tickets show with a strikethrough.
-        </p>
-      </div>
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 mb-1">Completed Jobs</h2>
+      <p className="text-gray-500 mb-6 text-sm">
+        Edit job details, exclude test tickets from metrics, or delete records.
+      </p>
 
       {tickets.length === 0 ? (
-        <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
-          <p className="text-lg font-medium">No completed jobs yet</p>
-        </div>
+        <p className="text-center text-gray-400 py-12">No completed tickets yet.</p>
       ) : (
-        <div className="space-y-2">
-          {tickets.map((ticket) => (
+        <div className="space-y-3">
+          {tickets.map((t) => (
             <div
-              key={ticket.id}
-              className={`bg-white rounded-lg shadow p-4 border-l-4 ${
-                ticket.excluded_from_metrics
-                  ? 'border-gray-300 opacity-60'
-                  : 'border-green-500'
-              }`}
+              key={t.id}
+              className={`card ${t.excluded_from_metrics ? 'opacity-50' : ''}`}
             >
-              {editingId === ticket.id ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <span className="font-bold text-gray-800">#{ticket.ticket_number}</span>
-                    <span>{SERVICE_TYPE_LABELS[ticket.service_type]}</span>
+              {/* Edit Mode */}
+              {editingId === t.id && editState ? (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span>{SERVICE_ICONS[t.service_type as keyof typeof SERVICE_ICONS]}</span>
+                    <span className="font-bold text-gray-800">#{t.ticket_number}</span>
+                    <span className="text-gray-600">
+                      {SERVICE_LABELS[t.service_type as keyof typeof SERVICE_LABELS]}
+                    </span>
                   </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Customer Name</label>
                       <input
                         type="text"
-                        value={editCustomerName}
-                        onChange={(e) => setEditCustomerName(e.target.value)}
-                        className="input"
+                        value={editState.customer_name}
+                        onChange={(e) => setEditState({ ...editState, customer_name: e.target.value })}
+                        className="input-field w-full"
                         placeholder="Customer name"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Completed At</label>
+                      <label className="block text-xs text-gray-500 mb-1">Vehicle</label>
                       <input
-                        type="datetime-local"
-                        value={editCompletedAt}
-                        onChange={(e) => setEditCompletedAt(e.target.value)}
-                        className="input"
+                        type="text"
+                        value={editState.vehicle}
+                        onChange={(e) => setEditState({ ...editState, vehicle: e.target.value })}
+                        className="input-field w-full"
+                        placeholder="Year Make Model"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Completed Date</label>
+                      <input
+                        type="date"
+                        value={editState.completed_at_date}
+                        onChange={(e) => setEditState({ ...editState, completed_at_date: e.target.value })}
+                        className="input-field w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Completed Time</label>
+                      <input
+                        type="time"
+                        value={editState.completed_at_time}
+                        onChange={(e) => setEditState({ ...editState, completed_at_time: e.target.value })}
+                        className="input-field w-full"
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Vehicle</label>
-                    <input
-                      type="text"
-                      value={editVehicle}
-                      onChange={(e) => setEditVehicle(e.target.value)}
-                      className="input"
-                      placeholder="Vehicle"
-                    />
-                  </div>
+
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Notes</label>
                     <textarea
-                      value={editNotes}
-                      onChange={(e) => setEditNotes(e.target.value)}
-                      className="input min-h-[60px]"
-                      placeholder="Notes (optional)"
+                      value={editState.notes}
+                      onChange={(e) => setEditState({ ...editState, notes: e.target.value })}
+                      className="input-field w-full"
+                      rows={2}
+                      placeholder="Notes..."
                     />
                   </div>
-                  <div className="flex gap-2">
+
+                  <div className="flex justify-end space-x-2 pt-1">
                     <button
-                      onClick={() => handleSaveEdit(ticket.id)}
-                      className="btn-primary text-sm"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="btn-secondary text-sm"
+                      onClick={cancelEdit}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200"
                     >
                       Cancel
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      disabled={saving}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-gray-800">#{ticket.ticket_number}</span>
-                      <span className={`text-sm px-2 py-0.5 rounded ${
-                        ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800' :
-                        ticket.priority === 'LOW' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {PRIORITY_LABELS[ticket.priority]}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        {SERVICE_TYPE_LABELS[ticket.service_type]}
-                      </span>
-                      {ticket.excluded_from_metrics && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                          Excluded from KPIs
+                /* View Mode */
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <span>{SERVICE_ICONS[t.service_type as keyof typeof SERVICE_ICONS]}</span>
+                        <span className="font-bold text-gray-800">#{t.ticket_number}</span>
+                        <span className="text-gray-600">
+                          {SERVICE_LABELS[t.service_type as keyof typeof SERVICE_LABELS]}
                         </span>
+                      </div>
+                      {t.customer_name && (
+                        <p className="text-gray-700 mt-1 font-medium">{t.customer_name}</p>
                       )}
+                      <p className="text-gray-700 mt-0.5">{t.vehicle}</p>
+                      {t.notes && (
+                        <p className="text-gray-500 text-sm mt-0.5 italic">{t.notes}</p>
+                      )}
+                      <p className="text-sm text-gray-400 mt-1">
+                        {t.technician_name && `Completed by ${t.technician_name} · `}
+                        {new Date(t.completed_at).toLocaleString()}
+                      </p>
                     </div>
-                    <p className={`text-gray-700 ${ticket.excluded_from_metrics ? 'line-through' : ''}`}>
-                      {ticket.customer_name && <span className="font-medium">{ticket.customer_name} — </span>}
-                      {ticket.vehicle}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {ticket.technician_name} · {ticket.completed_at ? formatDateTime(ticket.completed_at) : 'N/A'}
-                    </p>
                   </div>
-                  <div className="flex items-center gap-1 ml-4 flex-shrink-0">
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100">
                     <button
-                      onClick={() => handleToggleExcluded(ticket)}
-                      className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
-                        ticket.excluded_from_metrics
-                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                          : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                      onClick={() => startEdit(t)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleToggleExclude(t.id, t.excluded_from_metrics)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                        t.excluded_from_metrics
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
-                      title={ticket.excluded_from_metrics ? 'Include in KPIs' : 'Exclude from KPIs'}
                     >
-                      {ticket.excluded_from_metrics ? 'Include' : 'Exclude'}
+                      {t.excluded_from_metrics ? '✅ Include in Metrics' : '⊘ Exclude from Metrics'}
                     </button>
-                    <button
-                      onClick={() => handleStartEdit(ticket)}
-                      className="px-3 py-1.5 rounded text-xs font-semibold bg-sky-100 text-sky-800 hover:bg-sky-200 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTicket(ticket)}
-                      className="px-3 py-1.5 rounded text-xs font-semibold bg-red-100 text-red-800 hover:bg-red-200 transition-colors"
-                    >
-                      Delete
-                    </button>
+
+                    {deleteConfirmId === t.id ? (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-red-600 font-semibold">Delete this ticket?</span>
+                        <button
+                          onClick={() => handleDelete(t.id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700"
+                        >
+                          Yes, Delete
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeleteConfirmId(t.id)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-100"
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

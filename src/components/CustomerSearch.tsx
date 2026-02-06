@@ -1,254 +1,234 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { CustomerSearchResult, ServiceType } from '@/lib/types';
-import { SERVICE_TYPE_LABELS, formatPhone } from '@/lib/types';
-import { formatDateTime } from '@/lib/utils';
+import { SERVICE_LABELS } from '@/lib/utils';
 
-interface CustomerTicket {
-  id: string;
-  ticket_number: number;
-  service_type: ServiceType;
-  vehicle: string;
-  created_at: string;
-  status: string;
-  completed_at: string | null;
+interface CustomerResult {
+  name: string;
+  phone: string | null;
+  vehicles: string[];
+  total_visits: number;
+  last_visit: string | null;
+  tickets: {
+    id: string;
+    ticket_number: number;
+    service_type: string;
+    vehicle: string;
+    status: string;
+    created_at: string;
+  }[];
 }
 
 export default function CustomerSearch() {
-  const router = useRouter();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<CustomerSearchResult[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null);
-  const [customerTickets, setCustomerTickets] = useState<CustomerTicket[]>([]);
+  const [results, setResults] = useState<CustomerResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [expandedName, setExpandedName] = useState<string | null>(null);
 
-  // Debounced search
-  useEffect(() => {
-    if (query.length < 2) {
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setSearched(true);
+
+    const searchTerm = query.trim();
+    const phoneDigits = searchTerm.replace(/[^0-9]/g, '');
+
+    // Search tickets table directly (has customer_name and customer_phone)
+    let ticketQuery = supabase
+      .from('tickets')
+      .select('id, ticket_number, service_type, vehicle, status, created_at, customer_name, customer_phone')
+      .order('created_at', { ascending: false });
+
+    // Search by name OR phone
+    if (phoneDigits.length >= 4) {
+      ticketQuery = ticketQuery.or(`customer_name.ilike.%${searchTerm}%,customer_phone.ilike.%${phoneDigits}%`);
+    } else {
+      ticketQuery = ticketQuery.ilike('customer_name', `%${searchTerm}%`);
+    }
+
+    const { data: tickets, error } = await ticketQuery.limit(100);
+
+    if (error || !tickets) {
       setResults([]);
+      setLoading(false);
       return;
     }
 
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase.rpc('search_customers', {
-          query_text: query,
-        });
-        if (error) throw error;
-        setResults(data || []);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const handleSelectCustomer = useCallback(async (customer: CustomerSearchResult) => {
-    setSelectedCustomer(customer);
-    setTicketsLoading(true);
+    // Also try the customers table RPC (may have data in production)
+    let rpcResults: any[] = [];
     try {
-      const { data } = await supabase
-        .from('tickets')
-        .select('id, ticket_number, service_type, vehicle, created_at, status, completed_at')
-        .eq('customer_id', customer.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      setCustomerTickets(data || []);
-    } catch (error) {
-      console.error('Error loading tickets:', error);
-      setCustomerTickets([]);
-    } finally {
-      setTicketsLoading(false);
+      const { data: rpcData } = await supabase.rpc('search_customers', { query_text: searchTerm });
+      if (rpcData) rpcResults = rpcData;
+    } catch {
+      // RPC might fail if function doesn't exist yet, that's fine
     }
-  }, []);
 
-  const handleBackToSearch = () => {
-    setSelectedCustomer(null);
-    setCustomerTickets([]);
+    // Group tickets by customer name (normalized lowercase)
+    const customerMap: Record<string, CustomerResult> = {};
+
+    // Process RPC results first (from customers table)
+    rpcResults.forEach((c: any) => {
+      const key = (c.name || '').toLowerCase().trim();
+      if (!key) return;
+      if (!customerMap[key]) {
+        customerMap[key] = {
+          name: c.name,
+          phone: c.phone_raw || null,
+          vehicles: c.last_vehicle_text ? [c.last_vehicle_text] : [],
+          total_visits: c.total_visits || 0,
+          last_visit: c.last_visit_date || null,
+          tickets: [],
+        };
+      }
+    });
+
+    // Process ticket results
+    tickets.forEach((t) => {
+      const name = t.customer_name || 'Unknown';
+      const key = name.toLowerCase().trim();
+      if (!key || key === 'unknown') return;
+
+      if (!customerMap[key]) {
+        customerMap[key] = {
+          name,
+          phone: t.customer_phone || null,
+          vehicles: [],
+          total_visits: 0,
+          last_visit: null,
+          tickets: [],
+        };
+      }
+
+      const cust = customerMap[key];
+      cust.total_visits++;
+      if (t.customer_phone && !cust.phone) cust.phone = t.customer_phone;
+      if (t.vehicle && !cust.vehicles.includes(t.vehicle)) cust.vehicles.push(t.vehicle);
+      if (!cust.last_visit || t.created_at > cust.last_visit) cust.last_visit = t.created_at;
+
+      cust.tickets.push({
+        id: t.id,
+        ticket_number: t.ticket_number,
+        service_type: t.service_type,
+        vehicle: t.vehicle,
+        status: t.status,
+        created_at: t.created_at,
+      });
+    });
+
+    const sorted = Object.values(customerMap).sort((a, b) => {
+      if (a.last_visit && b.last_visit) return b.last_visit.localeCompare(a.last_visit);
+      if (a.last_visit) return -1;
+      if (b.last_visit) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    setResults(sorted);
+    setLoading(false);
   };
 
-  const handleCreateTicket = () => {
-    if (selectedCustomer) {
-      router.push(`/intake?customer_id=${selectedCustomer.id}`);
-    }
+  const formatPhone = (phone: string) => {
+    const d = phone.replace(/\D/g, '');
+    if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    return phone;
   };
 
-  // Detail view when a customer is selected
-  if (selectedCustomer) {
-    return (
-      <div className="space-y-6">
-        <button
-          onClick={handleBackToSearch}
-          className="text-sky-600 hover:text-sky-800 font-medium flex items-center gap-1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Search
-        </button>
-
-        {/* Customer Info Card */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">{selectedCustomer.name}</h2>
-              <p className="text-gray-600 mt-1">
-                {selectedCustomer.phone_raw ? formatPhone(selectedCustomer.phone_raw) : 'No phone'}
-              </p>
-              {selectedCustomer.last_vehicle_text && (
-                <p className="text-gray-500 text-sm mt-2">
-                  Last vehicle: {selectedCustomer.last_vehicle_text}
-                </p>
-              )}
-              <p className="text-gray-400 text-sm mt-1">
-                {selectedCustomer.total_visits} visit{selectedCustomer.total_visits !== 1 ? 's' : ''}
-                {selectedCustomer.last_visit_date && (
-                  <> · Last visit: {formatDateTime(selectedCustomer.last_visit_date)}</>
-                )}
-              </p>
-            </div>
-            <button
-              onClick={handleCreateTicket}
-              className="btn-primary whitespace-nowrap"
-            >
-              + Create Ticket
-            </button>
-          </div>
-        </div>
-
-        {/* Recent Tickets */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Recent Tickets</h3>
-          {ticketsLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="spinner"></div>
-            </div>
-          ) : customerTickets.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No tickets found for this customer</p>
-          ) : (
-            <div className="space-y-3">
-              {customerTickets.map((ticket) => (
-                <div
-                  key={ticket.id}
-                  className={`p-4 rounded-lg border-l-4 ${
-                    ticket.status === 'COMPLETED'
-                      ? 'bg-gray-50 border-green-500'
-                      : 'bg-yellow-50 border-yellow-500'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-gray-800">#{ticket.ticket_number}</span>
-                      <span className="ml-2 text-gray-600">
-                        {SERVICE_TYPE_LABELS[ticket.service_type]}
-                      </span>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      ticket.status === 'COMPLETED'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">{ticket.vehicle}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {formatDateTime(ticket.created_at)}
-                    {ticket.completed_at && ` · Completed ${formatDateTime(ticket.completed_at)}`}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Search view
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Customer Lookup</h2>
-        <p className="text-gray-600">Search by phone number or name to view customer history</p>
-      </div>
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 mb-1">Customer Search</h2>
+      <p className="text-gray-500 mb-6 text-sm">Search by name or phone number across all tickets.</p>
 
-      {/* Search Input */}
-      <div className="relative">
+      <div className="flex gap-3 mb-6">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search phone or name..."
-          className="input w-full pl-10"
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          placeholder="Name or phone number..."
+          className="input-field flex-1"
           autoFocus
         />
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
+        <button
+          onClick={handleSearch}
+          disabled={!query.trim() || loading}
+          className="btn-primary disabled:opacity-50"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
+          {loading ? 'Searching...' : 'Search'}
+        </button>
       </div>
 
-      {/* Results */}
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="spinner"></div>
-        </div>
-      ) : query.length < 2 ? (
-        <div className="text-center text-gray-500 py-8">
-          <p>Enter at least 2 characters to search</p>
-        </div>
-      ) : results.length === 0 ? (
-        <div className="text-center text-gray-500 py-8">
-          <p>No customers found matching "{query}"</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {results.map((customer) => (
-            <button
-              key={customer.id}
-              onClick={() => handleSelectCustomer(customer)}
-              className="w-full text-left bg-white rounded-lg shadow p-4 border-l-4 border-sky-500 hover:bg-sky-50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
+      {searched && results.length === 0 && !loading && (
+        <p className="text-center text-gray-400 py-8">No customers found matching &ldquo;{query}&rdquo;.</p>
+      )}
+
+      {results.length > 0 && (
+        <div className="space-y-3">
+          {results.map((c) => (
+            <div key={c.name} className="card">
+              <div
+                className="flex items-start justify-between cursor-pointer"
+                onClick={() => setExpandedName(expandedName === c.name ? null : c.name)}
+              >
                 <div>
-                  <p className="font-semibold text-gray-800">{customer.name}</p>
-                  <p className="text-sm text-gray-600">
-                    {customer.phone_raw ? formatPhone(customer.phone_raw) : 'No phone'}
-                  </p>
+                  <p className="font-bold text-gray-800 text-lg">{c.name}</p>
+                  {c.phone && <p className="text-gray-600">{formatPhone(c.phone)}</p>}
+                  {c.vehicles.length > 0 && (
+                    <p className="text-gray-500 text-sm mt-0.5">
+                      {c.vehicles.length === 1 ? 'Vehicle' : 'Vehicles'}: {c.vehicles.join(', ')}
+                    </p>
+                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">
-                    {customer.total_visits} visit{customer.total_visits !== 1 ? 's' : ''}
-                  </p>
-                  {customer.last_visit_date && (
-                    <p className="text-xs text-gray-400">
-                      Last: {formatDateTime(customer.last_visit_date)}
+                <div className="text-right flex-shrink-0">
+                  <p className="text-2xl font-bold text-sky-600">{c.total_visits}</p>
+                  <p className="text-xs text-gray-400">{c.total_visits === 1 ? 'visit' : 'visits'}</p>
+                  {c.last_visit && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Last: {new Date(c.last_visit).toLocaleDateString()}
                     </p>
                   )}
                 </div>
               </div>
-              {customer.last_vehicle_text && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Vehicle: {customer.last_vehicle_text}
-                </p>
+
+              {/* Expanded ticket history */}
+              {expandedName === c.name && c.tickets.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-semibold text-gray-500 mb-2">TICKET HISTORY</p>
+                  <div className="space-y-2">
+                    {c.tickets.map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="flex items-center justify-between py-1.5 px-2 rounded bg-gray-50"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-gray-700 text-sm">#{ticket.ticket_number}</span>
+                          <span className="text-sm text-gray-600">
+                            {SERVICE_LABELS[ticket.service_type as keyof typeof SERVICE_LABELS] || ticket.service_type}
+                          </span>
+                          <span className="text-xs text-gray-400">{ticket.vehicle}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span
+                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              ticket.status === 'COMPLETED'
+                                ? 'bg-green-100 text-green-700'
+                                : ticket.status === 'IN_PROGRESS'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}
+                          >
+                            {ticket.status.replace('_', ' ')}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {new Date(ticket.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
           ))}
         </div>
       )}

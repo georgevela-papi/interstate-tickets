@@ -2,519 +2,271 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { ServiceType, PriorityLevel } from '@/lib/types';
-import { SERVICE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/types';
+import { SERVICE_LABELS } from '@/lib/utils';
 
-type DateRange = 'today' | 'week' | 'month' | 'custom';
+type RangeMode = 'today' | 'week' | 'custom';
 
-interface TicketRow {
-  id: string;
-  ticket_number: number;
-  service_type: ServiceType;
-  priority: PriorityLevel;
-  status: string;
-  vehicle: string;
-  notes: string | null;
-  completed_at: string | null;
-  created_at: string;
-  technician_name: string | null;
+function getStartOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-interface KPIData {
-  totalToday: number;
-  totalThisWeek: number;
-  avgTimeMinutes: number;
-  pendingCount: number;
+function getStartOfWeek() {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-interface ServiceBreakdown {
-  type: ServiceType;
-  label: string;
-  count: number;
+function formatMins(totalMins: number) {
+  if (totalMins < 60) return `${totalMins}m`;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-interface TechBreakdown {
-  name: string;
-  count: number;
-}
-
-interface HourBreakdown {
-  hour: number;
-  label: string;
-  count: number;
-}
-
-interface PriorityBreakdownItem {
-  priority: PriorityLevel;
-  label: string;
-  count: number;
-  color: string;
+function toLocalDateStr(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
 export default function ReportsDashboard() {
-  const [dateRange, setDateRange] = useState<DateRange>('week');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [rangeMode, setRangeMode] = useState<RangeMode>('today');
+  const [customStart, setCustomStart] = useState(toLocalDateStr(getStartOfToday()));
+  const [customEnd, setCustomEnd] = useState(toLocalDateStr(new Date()));
+  const [stats, setStats] = useState({
+    total: 0,
+    completed: 0,
+    pending: 0,
+    avgTimeMins: 0,
+    totalHours: 0,
+    byService: [] as { service_type: string; count: number; hours: number }[],
+    byTech: [] as { name: string; count: number; hours: number }[],
+  });
   const [loading, setLoading] = useState(true);
-  const [kpis, setKpis] = useState<KPIData | null>(null);
-  const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [serviceBreakdown, setServiceBreakdown] = useState<ServiceBreakdown[]>([]);
-  const [techBreakdown, setTechBreakdown] = useState<TechBreakdown[]>([]);
-  const [hourBreakdown, setHourBreakdown] = useState<HourBreakdown[]>([]);
-  const [priorityBreakdown, setPriorityBreakdown] = useState<PriorityBreakdownItem[]>([]);
 
-  const getDateRangeStart = useCallback((): string => {
-    const now = new Date();
-    switch (dateRange) {
-      case 'today':
-        return now.toISOString().split('T')[0];
-      case 'week': {
-        const weekStart = new Date(now);
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-        return weekStart.toISOString().split('T')[0];
-      }
-      case 'month': {
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        return monthStart.toISOString().split('T')[0];
-      }
-      case 'custom':
-        return customStart || now.toISOString().split('T')[0];
-    }
-  }, [dateRange, customStart]);
-
-  const getDateRangeEnd = useCallback((): string => {
-    if (dateRange === 'custom' && customEnd) {
-      const end = new Date(customEnd);
-      end.setDate(end.getDate() + 1);
-      return end.toISOString().split('T')[0];
-    }
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  }, [dateRange, customEnd]);
-
-  const loadData = useCallback(async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
-    try {
-      const rangeStart = getDateRangeStart();
-      const rangeEnd = getDateRangeEnd();
 
-      // Fetch completed tickets with technician names (exclude tickets marked as excluded_from_metrics)
-      const { data: completedTickets } = await supabase
-        .from('tickets')
-        .select('id, ticket_number, service_type, priority, status, vehicle, notes, completed_at, created_at, completed_by, excluded_from_metrics')
-        .eq('status', 'COMPLETED')
-        .neq('excluded_from_metrics', true)
-        .gte('completed_at', rangeStart)
-        .lt('completed_at', rangeEnd)
-        .order('completed_at', { ascending: false });
+    let startDate: Date;
+    let endDate: Date;
 
-      // Fetch technicians for name lookup
-      const { data: technicians } = await supabase
-        .from('technicians')
-        .select('id, name');
-
-      const techMap = new Map<string, string>();
-      if (technicians) {
-        technicians.forEach((t: { id: string; name: string }) => {
-          techMap.set(t.id, t.name);
-        });
-      }
-
-      const rows: TicketRow[] = (completedTickets || []).map((t: any) => ({
-        id: t.id,
-        ticket_number: t.ticket_number,
-        service_type: t.service_type,
-        priority: t.priority,
-        status: t.status,
-        vehicle: t.vehicle,
-        notes: t.notes,
-        completed_at: t.completed_at,
-        created_at: t.created_at,
-        technician_name: t.completed_by ? techMap.get(t.completed_by) || 'Unknown' : null,
-      }));
-
-      setTickets(rows);
-      processBreakdowns(rows);
-
-      // Load KPIs
-      await loadKPIs();
-    } catch (error) {
-      console.error('Error loading report data:', error);
-    } finally {
-      setLoading(false);
+    if (rangeMode === 'today') {
+      startDate = getStartOfToday();
+      endDate = new Date();
+    } else if (rangeMode === 'week') {
+      startDate = getStartOfWeek();
+      endDate = new Date();
+    } else {
+      startDate = new Date(customStart + 'T00:00:00');
+      endDate = new Date(customEnd + 'T23:59:59');
     }
-  }, [getDateRangeStart, getDateRangeEnd]);
 
-  const loadKPIs = async () => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const startISO = startDate.toISOString();
+    const endISO = endDate.toISOString();
 
-      const [todayRes, weekRes, avgRes, pendingRes] = await Promise.all([
-        supabase
-          .from('tickets')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'COMPLETED')
-          .neq('excluded_from_metrics', true)
-          .gte('completed_at', today),
-        supabase
-          .from('tickets')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'COMPLETED')
-          .neq('excluded_from_metrics', true)
-          .gte('completed_at', weekStart.toISOString()),
-        supabase.rpc('get_avg_completion_time'),
-        supabase
-          .from('tickets')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'PENDING'),
-      ]);
+    // Fetch tickets in range
+    const { data: tickets } = await supabase
+      .from('tickets')
+      .select('id, status, service_type, completed_by, created_at, completed_at, excluded_from_metrics')
+      .gte('created_at', startISO)
+      .lte('created_at', endISO);
 
-      setKpis({
-        totalToday: todayRes.count || 0,
-        totalThisWeek: weekRes.count || 0,
-        avgTimeMinutes: avgRes.data?.[0]?.avg_minutes || 0,
-        pendingCount: pendingRes.count || 0,
-      });
-    } catch (error) {
-      console.error('Error loading KPIs:', error);
-    }
-  };
+    const all = tickets || [];
+    const total = all.length;
+    const completed = all.filter((t) => t.status === 'COMPLETED').length;
+    const pending = total - completed;
 
-  const processBreakdowns = (rows: TicketRow[]) => {
-    // Service type breakdown
-    const serviceMap = new Map<ServiceType, number>();
-    rows.forEach((t) => {
-      serviceMap.set(t.service_type, (serviceMap.get(t.service_type) || 0) + 1);
+    // Calc total hours and avg time (non-excluded completed only)
+    const validCompleted = all.filter(
+      (t) => t.status === 'COMPLETED' && t.completed_at && !t.excluded_from_metrics
+    );
+    let totalMinutes = 0;
+    validCompleted.forEach((t) => {
+      const mins = (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
+      totalMinutes += mins;
     });
-    const serviceBd: ServiceBreakdown[] = Array.from(serviceMap.entries())
-      .map(([type, count]) => ({
-        type,
-        label: SERVICE_TYPE_LABELS[type] || type,
-        count,
+    const avgTimeMins = validCompleted.length > 0 ? Math.round(totalMinutes / validCompleted.length) : 0;
+    const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
+
+    // By service type (include hours)
+    const serviceMap: Record<string, { count: number; mins: number }> = {};
+    all.forEach((t) => {
+      if (!serviceMap[t.service_type]) serviceMap[t.service_type] = { count: 0, mins: 0 };
+      serviceMap[t.service_type].count++;
+      if (t.status === 'COMPLETED' && t.completed_at && !t.excluded_from_metrics) {
+        serviceMap[t.service_type].mins +=
+          (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
+      }
+    });
+    const byService = Object.entries(serviceMap)
+      .map(([service_type, v]) => ({
+        service_type,
+        count: v.count,
+        hours: Math.round((v.mins / 60) * 10) / 10,
       }))
       .sort((a, b) => b.count - a.count);
-    setServiceBreakdown(serviceBd);
 
-    // Technician breakdown
-    const techMap = new Map<string, number>();
-    rows.forEach((t) => {
-      const name = t.technician_name || 'Unknown';
-      techMap.set(name, (techMap.get(name) || 0) + 1);
-    });
-    const techBd: TechBreakdown[] = Array.from(techMap.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-    setTechBreakdown(techBd);
+    // By technician
+    const completedWithTech = all.filter((t) => t.completed_by && t.status === 'COMPLETED');
+    const techIds = [...new Set(completedWithTech.map((t) => t.completed_by))];
 
-    // Hourly breakdown
-    const hourMap = new Map<number, number>();
-    rows.forEach((t) => {
-      if (t.completed_at) {
-        const hour = new Date(t.completed_at).getHours();
-        hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
-      }
-    });
-    const hourBd: HourBreakdown[] = [];
-    for (let h = 6; h <= 20; h++) {
-      const count = hourMap.get(h) || 0;
-      const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-      const ampm = h < 12 ? 'AM' : 'PM';
-      hourBd.push({ hour: h, label: `${displayHour}${ampm}`, count });
+    let byTech: { name: string; count: number; hours: number }[] = [];
+    if (techIds.length > 0) {
+      const { data: techs } = await supabase
+        .from('technicians')
+        .select('id, name')
+        .in('id', techIds);
+
+      const techMap: Record<string, { name: string; count: number; mins: number }> = {};
+      completedWithTech.forEach((t) => {
+        const tech = techs?.find((tc) => tc.id === t.completed_by);
+        const name = tech?.name || 'Unknown';
+        if (!techMap[name]) techMap[name] = { name, count: 0, mins: 0 };
+        techMap[name].count++;
+        if (t.completed_at && !t.excluded_from_metrics) {
+          techMap[name].mins +=
+            (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
+        }
+      });
+      byTech = Object.values(techMap)
+        .map((v) => ({ name: v.name, count: v.count, hours: Math.round((v.mins / 60) * 10) / 10 }))
+        .sort((a, b) => b.count - a.count);
     }
-    setHourBreakdown(hourBd);
 
-    // Priority breakdown
-    const priorityMap = new Map<PriorityLevel, number>();
-    rows.forEach((t) => {
-      priorityMap.set(t.priority, (priorityMap.get(t.priority) || 0) + 1);
-    });
-    const priorityColors: Record<PriorityLevel, string> = {
-      HIGH: 'bg-red-500',
-      NORMAL: 'bg-sky-500',
-      LOW: 'bg-gray-400',
-    };
-    const priorityBd: PriorityBreakdownItem[] = (['HIGH', 'NORMAL', 'LOW'] as PriorityLevel[]).map(
-      (p) => ({
-        priority: p,
-        label: PRIORITY_LABELS[p],
-        count: priorityMap.get(p) || 0,
-        color: priorityColors[p],
-      })
-    );
-    setPriorityBreakdown(priorityBd);
-  };
-
-  const exportCSV = () => {
-    if (tickets.length === 0) return;
-
-    const headers = [
-      'Ticket #',
-      'Service Type',
-      'Vehicle',
-      'Priority',
-      'Technician',
-      'Notes',
-      'Created',
-      'Completed',
-    ];
-
-    const csvRows = [headers.join(',')];
-    tickets.forEach((t) => {
-      const row = [
-        t.ticket_number,
-        SERVICE_TYPE_LABELS[t.service_type] || t.service_type,
-        `"${(t.vehicle || '').replace(/"/g, '""')}"`,
-        PRIORITY_LABELS[t.priority] || t.priority,
-        t.technician_name || '',
-        `"${(t.notes || '').replace(/"/g, '""')}"`,
-        t.created_at ? new Date(t.created_at).toLocaleString() : '',
-        t.completed_at ? new Date(t.completed_at).toLocaleString() : '',
-      ];
-      csvRows.push(row.join(','));
-    });
-
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    const rangeLabel = dateRange === 'custom'
-      ? `${customStart}_to_${customEnd}`
-      : dateRange;
-    link.download = `interstate_tickets_${rangeLabel}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+    setStats({ total, completed, pending, avgTimeMins, totalHours, byService, byTech });
+    setLoading(false);
+  }, [rangeMode, customStart, customEnd]);
 
   useEffect(() => {
-    if (dateRange !== 'custom') {
-      loadData();
-    }
-  }, [dateRange, loadData]);
+    loadStats();
+  }, [loadStats]);
 
-  useEffect(() => {
-    if (dateRange === 'custom' && customStart && customEnd) {
-      loadData();
-    }
-  }, [dateRange, customStart, customEnd, loadData]);
-
-  const maxServiceCount = Math.max(...serviceBreakdown.map((s) => s.count), 1);
-  const maxTechCount = Math.max(...techBreakdown.map((t) => t.count), 1);
-  const maxHourCount = Math.max(...hourBreakdown.map((h) => h.count), 1);
-  const totalPriority = priorityBreakdown.reduce((sum, p) => sum + p.count, 0) || 1;
-
-  const serviceColors: Record<string, string> = {
-    MOUNT_BALANCE: 'bg-sky-500',
-    FLAT_REPAIR: 'bg-orange-500',
-    ROTATION: 'bg-green-500',
-    NEW_TIRES: 'bg-purple-500',
-    USED_TIRES: 'bg-indigo-500',
-    DETAILING: 'bg-pink-500',
-    MAINTENANCE: 'bg-teal-500',
-    APPOINTMENT: 'bg-amber-500',
-  };
+  const rangeLabel = rangeMode === 'today' ? 'Today' : rangeMode === 'week' ? 'This Week' : 'Custom Range';
 
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      {kpis && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="rounded-xl p-4 bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow">
-            <p className="text-sm font-semibold opacity-90 mb-1">TODAY</p>
-            <p className="text-4xl font-bold">{kpis.totalToday}</p>
-            <p className="text-sm opacity-80">Jobs Completed</p>
-          </div>
-          <div className="rounded-xl p-4 bg-gradient-to-br from-green-500 to-green-600 text-white shadow">
-            <p className="text-sm font-semibold opacity-90 mb-1">THIS WEEK</p>
-            <p className="text-4xl font-bold">{kpis.totalThisWeek}</p>
-            <p className="text-sm opacity-80">Jobs Completed</p>
-          </div>
-          <div className="rounded-xl p-4 bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow">
-            <p className="text-sm font-semibold opacity-90 mb-1">AVG TIME</p>
-            <p className="text-4xl font-bold">{Math.round(kpis.avgTimeMinutes)}</p>
-            <p className="text-sm opacity-80">Minutes</p>
-          </div>
-          <div className="rounded-xl p-4 bg-gradient-to-br from-red-500 to-red-600 text-white shadow">
-            <p className="text-sm font-semibold opacity-90 mb-1">PENDING</p>
-            <p className="text-4xl font-bold">{kpis.pendingCount}</p>
-            <p className="text-sm opacity-80">In Queue</p>
-          </div>
-        </div>
-      )}
-
-      {/* Date Range Filter + Export */}
-      <div className="bg-white rounded-xl shadow p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-gray-600 mr-1">Date Range:</span>
-            {(['today', 'week', 'month', 'custom'] as DateRange[]).map((range) => (
-              <button
-                key={range}
-                onClick={() => setDateRange(range)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  dateRange === range
-                    ? 'bg-sky-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {range === 'today' ? 'Today' : range === 'week' ? 'This Week' : range === 'month' ? 'This Month' : 'Custom'}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={exportCSV}
-            disabled={tickets.length === 0}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export CSV
-          </button>
+      {/* Range Selector */}
+      <div className="card">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-gray-600">Period:</span>
+          {(['today', 'week', 'custom'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setRangeMode(mode)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                rangeMode === mode
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {mode === 'today' ? 'Today' : mode === 'week' ? 'This Week' : 'Date Range'}
+            </button>
+          ))}
         </div>
 
-        {dateRange === 'custom' && (
-          <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t">
-            <label className="text-sm text-gray-600">From:</label>
-            <input
-              type="date"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="border rounded-lg px-3 py-1.5 text-sm"
-            />
-            <label className="text-sm text-gray-600">To:</label>
-            <input
-              type="date"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="border rounded-lg px-3 py-1.5 text-sm"
-            />
+        {rangeMode === 'custom' && (
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="input-field text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">End Date</label>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="input-field text-sm"
+              />
+            </div>
           </div>
         )}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="spinner"></div>
-        </div>
-      ) : tickets.length === 0 ? (
-        <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
-          <p className="text-lg font-medium">No completed jobs in this date range</p>
-          <p className="text-sm mt-1">Try selecting a different date range</p>
-        </div>
+        <div className="flex justify-center py-12"><div className="spinner" /></div>
       ) : (
         <>
-          {/* Summary line */}
-          <p className="text-sm text-gray-500 text-right">
-            {tickets.length} completed job{tickets.length !== 1 ? 's' : ''} in selected range
-          </p>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Jobs by Service Type */}
-            <div className="bg-white rounded-xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Jobs by Service Type</h3>
-              <div className="space-y-3">
-                {serviceBreakdown.map((s) => (
-                  <div key={s.type}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700 font-medium">{s.label}</span>
-                      <span className="text-gray-500">{s.count}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full transition-all ${serviceColors[s.type] || 'bg-gray-500'}`}
-                        style={{ width: `${(s.count / maxServiceCount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-                {serviceBreakdown.length === 0 && (
-                  <p className="text-sm text-gray-400">No data</p>
-                )}
-              </div>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="card text-center">
+              <p className="text-3xl font-bold text-gray-800">{stats.total}</p>
+              <p className="text-sm text-gray-500">{rangeLabel} Tickets</p>
             </div>
-
-            {/* Jobs per Technician */}
-            <div className="bg-white rounded-xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Jobs per Technician</h3>
-              <div className="space-y-3">
-                {techBreakdown.map((t) => (
-                  <div key={t.name}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-700 font-medium">{t.name}</span>
-                      <span className="text-gray-500">{t.count}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
-                      <div
-                        className="h-3 rounded-full bg-sky-500 transition-all"
-                        style={{ width: `${(t.count / maxTechCount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-                {techBreakdown.length === 0 && (
-                  <p className="text-sm text-gray-400">No data</p>
-                )}
-              </div>
+            <div className="card text-center">
+              <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+              <p className="text-sm text-gray-500">Completed</p>
             </div>
-
-            {/* Busiest Hours */}
-            <div className="bg-white rounded-xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Busiest Hours</h3>
-              <div className="flex items-end gap-1 h-40">
-                {hourBreakdown.map((h) => (
-                  <div key={h.hour} className="flex-1 flex flex-col items-center justify-end h-full">
-                    <span className="text-xs text-gray-500 mb-1">
-                      {h.count > 0 ? h.count : ''}
-                    </span>
-                    <div
-                      className={`w-full rounded-t transition-all ${
-                        h.count > 0 ? 'bg-amber-400' : 'bg-gray-100'
-                      }`}
-                      style={{
-                        height: h.count > 0 ? `${Math.max((h.count / maxHourCount) * 100, 8)}%` : '4px',
-                      }}
-                    />
-                    <span className="text-[10px] text-gray-400 mt-1 leading-none">{h.label}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="card text-center">
+              <p className="text-3xl font-bold text-orange-500">{stats.pending}</p>
+              <p className="text-sm text-gray-500">Pending</p>
             </div>
+            <div className="card text-center">
+              <p className="text-3xl font-bold text-sky-600">{formatMins(stats.avgTimeMins)}</p>
+              <p className="text-sm text-gray-500">Avg Completion</p>
+            </div>
+            <div className="card text-center col-span-2 md:col-span-1">
+              <p className="text-3xl font-bold text-purple-600">{stats.totalHours}h</p>
+              <p className="text-sm text-gray-500">Total Hours</p>
+            </div>
+          </div>
 
-            {/* Priority Distribution */}
-            <div className="bg-white rounded-xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Priority Distribution</h3>
-              {/* Stacked bar */}
-              <div className="w-full h-8 rounded-full overflow-hidden flex bg-gray-100 mb-4">
-                {priorityBreakdown.map((p) =>
-                  p.count > 0 ? (
-                    <div
-                      key={p.priority}
-                      className={`${p.color} transition-all`}
-                      style={{ width: `${(p.count / totalPriority) * 100}%` }}
-                    />
-                  ) : null
-                )}
-              </div>
+          {/* Service Breakdown */}
+          <div className="card">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">{rangeLabel} by Service Type</h3>
+            {stats.byService.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">No tickets in this period</p>
+            ) : (
               <div className="space-y-2">
-                {priorityBreakdown.map((p) => (
-                  <div key={p.priority} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${p.color}`} />
-                      <span className="text-sm text-gray-700">{p.label}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">
-                      {p.count} ({totalPriority > 0 ? Math.round((p.count / totalPriority) * 100) : 0}%)
+                {stats.byService.map((s) => (
+                  <div key={s.service_type} className="flex items-center justify-between py-2">
+                    <span className="text-gray-700">
+                      {SERVICE_LABELS[s.service_type as keyof typeof SERVICE_LABELS] || s.service_type}
                     </span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs text-gray-400">{s.hours}h logged</span>
+                      <span className="font-bold text-gray-800 bg-gray-100 px-3 py-1 rounded-full text-sm">
+                        {s.count}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* Technician Performance */}
+          <div className="card">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Technician Performance ({rangeLabel})</h3>
+            {stats.byTech.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">No completed tickets in this period</p>
+            ) : (
+              <div className="space-y-2">
+                {stats.byTech.map((t, i) => (
+                  <div key={t.name} className="flex items-center justify-between py-2">
+                    <div className="flex items-center space-x-3">
+                      <span className={`text-lg font-bold ${i === 0 ? 'text-yellow-500' : 'text-gray-400'}`}>
+                        #{i + 1}
+                      </span>
+                      <span className="text-gray-700 font-medium">{t.name}</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xs text-gray-400">{t.hours}h</span>
+                      <span className="font-bold text-gray-800 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                        {t.count} completed
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
