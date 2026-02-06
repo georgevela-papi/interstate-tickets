@@ -2,7 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { SERVICE_LABELS, SERVICE_ICONS } from '@/lib/utils';
+
+const SERVICE_LABELS: Record<string, string> = {
+  MOUNT_BALANCE: 'Mount & Balance',
+  FLAT_REPAIR: 'Flat Repair',
+  ROTATION: 'Rotation',
+  NEW_TIRES: 'New Tires',
+  USED_TIRES: 'Used Tires',
+  DETAILING: 'Detailing',
+  APPOINTMENT: 'Appointment',
+  MAINTENANCE: 'Maintenance',
+};
+
+const SERVICE_ICONS: Record<string, string> = {
+  MOUNT_BALANCE: '🔧',
+  FLAT_REPAIR: '🛞',
+  ROTATION: '🔄',
+  NEW_TIRES: '✨',
+  USED_TIRES: '♻️',
+  DETAILING: '🧼',
+  APPOINTMENT: '📅',
+  MAINTENANCE: '⚙️',
+};
 
 interface CompletedTicket {
   id: string;
@@ -147,10 +168,10 @@ export default function CompletedJobsManager() {
               {editingId === t.id && editState ? (
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2 mb-2">
-                    <span>{SERVICE_ICONS[t.service_type as keyof typeof SERVICE_ICONS]}</span>
+                    <span>{SERVICE_ICONS[t.service_type] || '📋'}</span>
                     <span className="font-bold text-gray-800">#{t.ticket_number}</span>
                     <span className="text-gray-600">
-                      {SERVICE_LABELS[t.service_type as keyof typeof SERVICE_LABELS]}
+                      {SERVICE_LABELS[t.service_type] || t.service_type}
                     </span>
                   </div>
 
@@ -228,10 +249,10 @@ export default function CompletedJobsManager() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
-                        <span>{SERVICE_ICONS[t.service_type as keyof typeof SERVICE_ICONS]}</span>
+                        <span>{SERVICE_ICONS[t.service_type] || '📋'}</span>
                         <span className="font-bold text-gray-800">#{t.ticket_number}</span>
                         <span className="text-gray-600">
-                          {SERVICE_LABELS[t.service_type as keyof typeof SERVICE_LABELS]}
+                          {SERVICE_LABELS[t.service_type] || t.service_type}
                         </span>
                       </div>
                       {t.customer_name && (

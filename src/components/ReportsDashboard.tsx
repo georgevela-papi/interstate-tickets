@@ -2,7 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { SERVICE_LABELS } from '@/lib/utils';
+
+const SERVICE_LABELS: Record<string, string> = {
+  MOUNT_BALANCE: 'Mount & Balance',
+  FLAT_REPAIR: 'Flat Repair',
+  ROTATION: 'Rotation',
+  NEW_TIRES: 'New Tires',
+  USED_TIRES: 'Used Tires',
+  DETAILING: 'Detailing',
+  APPOINTMENT: 'Appointment',
+  MAINTENANCE: 'Maintenance',
+};
 
 type RangeMode = 'today' | 'week' | 'custom';
 
@@ -14,7 +24,7 @@ function getStartOfToday() {
 
 function getStartOfWeek() {
   const d = new Date();
-  const day = d.getDay(); // 0=Sun
+  const day = d.getDay();
   d.setDate(d.getDate() - day);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -66,7 +76,6 @@ export default function ReportsDashboard() {
     const startISO = startDate.toISOString();
     const endISO = endDate.toISOString();
 
-    // Fetch tickets in range
     const { data: tickets } = await supabase
       .from('tickets')
       .select('id, status, service_type, completed_by, created_at, completed_at, excluded_from_metrics')
@@ -78,7 +87,6 @@ export default function ReportsDashboard() {
     const completed = all.filter((t) => t.status === 'COMPLETED').length;
     const pending = total - completed;
 
-    // Calc total hours and avg time (non-excluded completed only)
     const validCompleted = all.filter(
       (t) => t.status === 'COMPLETED' && t.completed_at && !t.excluded_from_metrics
     );
@@ -90,7 +98,6 @@ export default function ReportsDashboard() {
     const avgTimeMins = validCompleted.length > 0 ? Math.round(totalMinutes / validCompleted.length) : 0;
     const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
 
-    // By service type (include hours)
     const serviceMap: Record<string, { count: number; mins: number }> = {};
     all.forEach((t) => {
       if (!serviceMap[t.service_type]) serviceMap[t.service_type] = { count: 0, mins: 0 };
@@ -108,9 +115,8 @@ export default function ReportsDashboard() {
       }))
       .sort((a, b) => b.count - a.count);
 
-    // By technician
     const completedWithTech = all.filter((t) => t.completed_by && t.status === 'COMPLETED');
-    const techIds = [...new Set(completedWithTech.map((t) => t.completed_by))];
+    const techIds = Array.from(new Set(completedWithTech.map((t) => t.completed_by)));
 
     let byTech: { name: string; count: number; hours: number }[] = [];
     if (techIds.length > 0) {
@@ -147,7 +153,6 @@ export default function ReportsDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Range Selector */}
       <div className="card">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-gray-600">Period:</span>
@@ -194,7 +199,6 @@ export default function ReportsDashboard() {
         <div className="flex justify-center py-12"><div className="spinner" /></div>
       ) : (
         <>
-          {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="card text-center">
               <p className="text-3xl font-bold text-gray-800">{stats.total}</p>
@@ -218,7 +222,6 @@ export default function ReportsDashboard() {
             </div>
           </div>
 
-          {/* Service Breakdown */}
           <div className="card">
             <h3 className="text-lg font-bold text-gray-800 mb-4">{rangeLabel} by Service Type</h3>
             {stats.byService.length === 0 ? (
@@ -228,7 +231,7 @@ export default function ReportsDashboard() {
                 {stats.byService.map((s) => (
                   <div key={s.service_type} className="flex items-center justify-between py-2">
                     <span className="text-gray-700">
-                      {SERVICE_LABELS[s.service_type as keyof typeof SERVICE_LABELS] || s.service_type}
+                      {SERVICE_LABELS[s.service_type] || s.service_type}
                     </span>
                     <div className="flex items-center space-x-3">
                       <span className="text-xs text-gray-400">{s.hours}h logged</span>
@@ -242,7 +245,6 @@ export default function ReportsDashboard() {
             )}
           </div>
 
-          {/* Technician Performance */}
           <div className="card">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Technician Performance ({rangeLabel})</h3>
             {stats.byTech.length === 0 ? (

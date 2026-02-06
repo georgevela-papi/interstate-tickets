@@ -2,7 +2,17 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { SERVICE_LABELS } from '@/lib/utils';
+
+const SERVICE_LABELS: Record<string, string> = {
+  MOUNT_BALANCE: 'Mount & Balance',
+  FLAT_REPAIR: 'Flat Repair',
+  ROTATION: 'Rotation',
+  NEW_TIRES: 'New Tires',
+  USED_TIRES: 'Used Tires',
+  DETAILING: 'Detailing',
+  APPOINTMENT: 'Appointment',
+  MAINTENANCE: 'Maintenance',
+};
 
 interface CustomerResult {
   name: string;
@@ -35,13 +45,11 @@ export default function CustomerSearch() {
     const searchTerm = query.trim();
     const phoneDigits = searchTerm.replace(/[^0-9]/g, '');
 
-    // Search tickets table directly (has customer_name and customer_phone)
     let ticketQuery = supabase
       .from('tickets')
       .select('id, ticket_number, service_type, vehicle, status, created_at, customer_name, customer_phone')
       .order('created_at', { ascending: false });
 
-    // Search by name OR phone
     if (phoneDigits.length >= 4) {
       ticketQuery = ticketQuery.or(`customer_name.ilike.%${searchTerm}%,customer_phone.ilike.%${phoneDigits}%`);
     } else {
@@ -56,19 +64,17 @@ export default function CustomerSearch() {
       return;
     }
 
-    // Also try the customers table RPC (may have data in production)
+    // Also try the customers table RPC
     let rpcResults: any[] = [];
     try {
       const { data: rpcData } = await supabase.rpc('search_customers', { query_text: searchTerm });
       if (rpcData) rpcResults = rpcData;
     } catch {
-      // RPC might fail if function doesn't exist yet, that's fine
+      // RPC might fail, that's fine
     }
 
-    // Group tickets by customer name (normalized lowercase)
     const customerMap: Record<string, CustomerResult> = {};
 
-    // Process RPC results first (from customers table)
     rpcResults.forEach((c: any) => {
       const key = (c.name || '').toLowerCase().trim();
       if (!key) return;
@@ -84,7 +90,6 @@ export default function CustomerSearch() {
       }
     });
 
-    // Process ticket results
     tickets.forEach((t) => {
       const name = t.customer_name || 'Unknown';
       const key = name.toLowerCase().trim();
@@ -190,7 +195,6 @@ export default function CustomerSearch() {
                 </div>
               </div>
 
-              {/* Expanded ticket history */}
               {expandedName === c.name && c.tickets.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-gray-100">
                   <p className="text-xs font-semibold text-gray-500 mb-2">TICKET HISTORY</p>
@@ -203,7 +207,7 @@ export default function CustomerSearch() {
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-gray-700 text-sm">#{ticket.ticket_number}</span>
                           <span className="text-sm text-gray-600">
-                            {SERVICE_LABELS[ticket.service_type as keyof typeof SERVICE_LABELS] || ticket.service_type}
+                            {SERVICE_LABELS[ticket.service_type] || ticket.service_type}
                           </span>
                           <span className="text-xs text-gray-400">{ticket.vehicle}</span>
                         </div>
