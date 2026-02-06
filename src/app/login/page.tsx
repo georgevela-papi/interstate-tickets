@@ -12,6 +12,13 @@ type LoginState =
   | 'verifying'
   | 'access_denied';
 
+interface StaffInfo {
+  id: string;
+  tenant_id: string;
+  role: string;
+  name: string;
+}
+
 export default function LoginPage() {
   const { tenant, loading: tenantLoading, isAuthenticated } = useTenant();
 
@@ -57,14 +64,13 @@ export default function LoginPage() {
           return;
         }
 
-        // Verify user has a profile (allowlist check)
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, tenant_id, role')
-          .single();
+        // Verify user has an active staff record (allowlist check)
+        const { data: staffData, error: staffError } = await supabase
+          .rpc('get_my_staff')
+          .single() as { data: StaffInfo | null; error: Error | null };
 
-        if (profileError || !profile) {
-          // No profile = not on allowlist
+        if (staffError || !staffData) {
+          // No active staff record = not authorized
           await supabase.auth.signOut();
           setState('access_denied');
           setError('You are not authorized to access this system. Contact your administrator.');
@@ -72,7 +78,7 @@ export default function LoginPage() {
         }
 
         // Verify tenant match (boot guard)
-        if (tenant && profile.tenant_id !== tenant.id) {
+        if (tenant && staffData.tenant_id !== tenant.id) {
           await supabase.auth.signOut();
           setState('access_denied');
           setError('You do not have access to this business.');
@@ -104,24 +110,6 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Pre-auth check: verify email is on staff allowlist for this tenant
-      // Uses SECURITY DEFINER RPC that returns BOOLEAN only (no data exposure)
-      // This provides better UX by catching invalid emails before hitting auth
-      const { data: isAllowed, error: rpcError } = await supabase
-        .rpc('check_staff_allowlist', {
-          p_email: email.toLowerCase().trim(),
-          p_tenant_slug: tenant?.slug || 'interstate'
-        });
-
-      if (rpcError) {
-        console.error('Allowlist check failed:', rpcError);
-        // Don't block login on RPC error - let auth handle it
-      } else if (isAllowed === false) {
-        setState('error');
-        setError('Your account must be created by an administrator.');
-        return;
-      }
-
       // Send magic link (INVITE-ONLY: user must already exist in auth.users)
       const redirectUrl = `${window.location.origin}/login`;
 
@@ -129,7 +117,7 @@ export default function LoginPage() {
         email: email.toLowerCase().trim(),
         options: {
           emailRedirectTo: redirectUrl,
-          shouldCreateUser: false, // CRITICAL: Never create users from client
+          shouldCreateUser: true, // Allow auto-creation, staff check happens after login
         },
       });
 

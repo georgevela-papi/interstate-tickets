@@ -12,7 +12,7 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
-  const { tenant, profile, loading, error, isAuthenticated } = useTenant();
+  const { tenant, staff, loading, error, isAuthenticated } = useTenant();
   const router = useRouter();
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   }
 
   // Role check
-  if (requiredRole && profile?.role !== requiredRole && profile?.role !== 'MANAGER') {
+  if (requiredRole && staff?.role !== requiredRole && staff?.role !== 'MANAGER') {
     return <AccessDenied message="You do not have permission to access this page." />;
   }
 

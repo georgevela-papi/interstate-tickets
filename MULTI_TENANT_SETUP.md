@@ -46,15 +46,23 @@ This prevents unauthorized users from creating accounts.
 
 ---
 
-## Step 4: Configure Redirect URLs
+## Step 4: Configure Redirect URLs (CRITICAL for Production)
+
+> **WARNING:** The Site URL determines where magic link emails redirect users. If set to `localhost`, users clicking magic links on mobile devices or other computers will get "cannot connect to server" errors.
 
 1. Go to **Supabase Dashboard > Authentication > URL Configuration**
-2. Set **Site URL**: `http://localhost:3000` (or your production URL)
-3. Add **Redirect URLs**:
+2. Set **Site URL**:
+   - **Development:** `http://localhost:3000`
+   - **Production:** `https://your-production-domain.com` (REQUIRED for deployed apps)
+3. Add **Redirect URLs** (whitelist all environments):
    - `http://localhost:3000/login`
    - `http://localhost:3000/auth/callback`
-   - `https://your-production-domain.com/login` (if applicable)
+   - `https://your-production-domain.com/login`
+   - `https://your-production-domain.com/auth/callback`
    - `https://*.your-production-domain.com/login` (for multi-tenant subdomains)
+   - `https://*.your-production-domain.com/auth/callback`
+
+> **Note:** You can only have ONE Site URL at a time. For production deployments, this MUST be your production domain.
 
 ---
 
@@ -159,6 +167,11 @@ curl -X POST http://localhost:3000/api/admin/invite-staff \
 - Verify migrations ran in correct order (007 before 010)
 - Check that `get_my_tenant_id()` function exists
 - Verify user has a profile record
+
+### Magic link redirects to localhost / "Cannot connect to server"
+- **Cause:** The Site URL in Supabase Dashboard is set to `http://localhost:3000`
+- **Fix:** Go to **Supabase Dashboard > Authentication > URL Configuration** and change the **Site URL** to your production domain (e.g., `https://your-domain.com`)
+- **Note:** Magic link emails use the Site URL for redirects. This must match where your app is deployed.
 
 ---
 

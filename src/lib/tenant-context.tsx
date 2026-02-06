@@ -12,16 +12,16 @@ interface Tenant {
   secondary_color: string;
 }
 
-interface Profile {
+interface StaffInfo {
   id: string;
   tenant_id: string;
-  staff_id: string;
   role: 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER';
+  name: string;
 }
 
 interface TenantContextValue {
   tenant: Tenant | null;
-  profile: Profile | null;
+  staff: StaffInfo | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
@@ -29,7 +29,7 @@ interface TenantContextValue {
 
 const TenantContext = createContext<TenantContextValue>({
   tenant: null,
-  profile: null,
+  staff: null,
   loading: true,
   error: null,
   isAuthenticated: false,
@@ -42,7 +42,7 @@ interface TenantProviderProps {
 
 export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [staff, setStaff] = useState<StaffInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -84,15 +84,13 @@ export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
           return;
         }
 
-        // 3. Load profile
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+        // 3. Load staff info via RPC (simpler than profiles table)
+        const { data: staffData, error: staffError } = await supabase
+          .rpc('get_my_staff')
+          .single() as { data: StaffInfo | null; error: Error | null };
 
-        if (profileError || !profileData) {
-          // Authenticated but no profile = not on allowlist
+        if (staffError || !staffData) {
+          // Authenticated but no active staff record = not authorized
           await supabase.auth.signOut();
           if (mounted) {
             setError('Your account is not authorized. Contact your administrator.');
@@ -102,7 +100,7 @@ export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
         }
 
         // 4. CRITICAL: Verify tenant match
-        if (profileData.tenant_id !== tenantData.id) {
+        if (staffData.tenant_id !== tenantData.id) {
           await supabase.auth.signOut();
           if (mounted) {
             setError('You do not have access to this business.');
@@ -113,7 +111,7 @@ export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
 
         // 5. Success
         if (mounted) {
-          setProfile(profileData);
+          setStaff(staffData as StaffInfo);
           setIsAuthenticated(true);
           setLoading(false);
         }
@@ -132,7 +130,7 @@ export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_OUT') {
-          setProfile(null);
+          setStaff(null);
           setIsAuthenticated(false);
         } else if (event === 'SIGNED_IN' && session) {
           // Re-run initialization
@@ -148,7 +146,7 @@ export function TenantProvider({ children, tenantSlug }: TenantProviderProps) {
   }, [tenantSlug]);
 
   return (
-    <TenantContext.Provider value={{ tenant, profile, loading, error, isAuthenticated }}>
+    <TenantContext.Provider value={{ tenant, staff, loading, error, isAuthenticated }}>
       {children}
     </TenantContext.Provider>
   );

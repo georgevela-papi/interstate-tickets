@@ -11,7 +11,7 @@ import { useTenant } from '@/lib/tenant-context';
  * - Unauthenticated users → /login
  */
 export default function HomePage() {
-  const { profile, loading, isAuthenticated } = useTenant();
+  const { staff, loading, isAuthenticated } = useTenant();
   const router = useRouter();
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function HomePage() {
     }
 
     // Route based on role
-    switch (profile?.role) {
+    switch (staff?.role) {
       case 'SERVICE_WRITER':
         router.push('/intake');
         break;
@@ -36,7 +36,7 @@ export default function HomePage() {
       default:
         router.push('/login');
     }
-  }, [loading, isAuthenticated, profile, router]);
+  }, [loading, isAuthenticated, staff, router]);
 
   // Show loading spinner during redirect
   return (
