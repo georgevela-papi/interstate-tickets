@@ -117,7 +117,7 @@ export default function LoginPage() {
         email: email.toLowerCase().trim(),
         options: {
           emailRedirectTo: redirectUrl,
-          shouldCreateUser: false, // CRITICAL: Never create users from client
+          shouldCreateUser: true, // Allow auto-creation, staff check happens after login
         },
       });
 
