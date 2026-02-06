@@ -110,24 +110,6 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Pre-auth check: verify email is on staff allowlist for this tenant
-      // Uses SECURITY DEFINER RPC that returns BOOLEAN only (no data exposure)
-      // This provides better UX by catching invalid emails before hitting auth
-      const { data: isAllowed, error: rpcError } = await supabase
-        .rpc('check_staff_allowlist', {
-          p_email: email.toLowerCase().trim(),
-          p_tenant_slug: tenant?.slug || 'interstate'
-        });
-
-      if (rpcError) {
-        console.error('Allowlist check failed:', rpcError);
-        // Don't block login on RPC error - let auth handle it
-      } else if (isAllowed === false) {
-        setState('error');
-        setError('Your account must be created by an administrator.');
-        return;
-      }
-
       // Send magic link (INVITE-ONLY: user must already exist in auth.users)
       const redirectUrl = `${window.location.origin}/login`;
 
