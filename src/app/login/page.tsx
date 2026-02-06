@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase, saveSession } from '@/lib/supabase';
 import { useTenant } from '@/lib/tenant-context';
 
-type LoginState =
+type LoginMode = 'pin' | 'email';
+
+type EmailState =
   | 'idle'
   | 'sending'
   | 'sent'
@@ -20,21 +22,48 @@ interface StaffInfo {
 }
 
 export default function LoginPage() {
-  const { tenant, loading: tenantLoading, isAuthenticated } = useTenant();
+  const { tenant, staff, loading: tenantLoading, isAuthenticated } = useTenant();
 
-  const [email, setEmail] = useState('');
-  const [state, setState] = useState<LoginState>('idle');
+  // --- Shared ---
+  const [mode, setMode] = useState<LoginMode>('pin');
   const [error, setError] = useState<string | null>(null);
+
+  // --- PIN pad ---
+  const [pinCode, setPinCode] = useState('');
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState<string | null>(null);
+
+  // --- Email / Magic Link ---
+  const [email, setEmail] = useState('');
+  const [emailState, setEmailState] = useState<EmailState>('idle');
   const [cooldown, setCooldown] = useState(0);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      window.location.href = '/queue';
-    }
-  }, [isAuthenticated]);
+  // Check if device is already activated (has a valid Supabase auth session)
+  const [deviceActivated, setDeviceActivated] = useState(false);
 
-  // Handle magic link callback
+  useEffect(() => {
+    async function checkDevice() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setDeviceActivated(true);
+      }
+    }
+    checkDevice();
+  }, []);
+
+  // If fully authenticated with staff context, redirect
+  useEffect(() => {
+    if (isAuthenticated && staff) {
+      saveSession(staff.id, staff.name, staff.role);
+      const route = staff.role === 'SERVICE_WRITER' ? '/intake'
+        : staff.role === 'TECHNICIAN' ? '/queue'
+        : staff.role === 'MANAGER' ? '/admin'
+        : '/login';
+      window.location.href = route;
+    }
+  }, [isAuthenticated, staff]);
+
+  // Handle magic link callback (hash fragment tokens)
   useEffect(() => {
     const handleAuthCallback = async () => {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -44,56 +73,61 @@ export default function LoginPage() {
       const errorDescription = hashParams.get('error_description');
 
       if (hashError) {
-        setState('error');
+        setEmailState('error');
         setError(errorDescription || 'Authentication failed');
         return;
       }
 
       if (accessToken && refreshToken) {
-        setState('verifying');
+        setMode('email');
+        setEmailState('verifying');
 
-        // Set session
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
 
         if (sessionError) {
-          setState('error');
+          setEmailState('error');
           setError(sessionError.message);
           return;
         }
 
-        // Verify user has an active staff record (allowlist check)
+        // Verify staff record
         const { data: staffData, error: staffError } = await supabase
           .rpc('get_my_staff')
           .single() as { data: StaffInfo | null; error: Error | null };
 
         if (staffError || !staffData) {
-          // No active staff record = not authorized
           await supabase.auth.signOut();
-          setState('access_denied');
-          setError('You are not authorized to access this system. Contact your administrator.');
+          setEmailState('access_denied');
+          setError('You are not authorized. Contact your administrator.');
           return;
         }
 
-        // Verify tenant match (boot guard)
         if (tenant && staffData.tenant_id !== tenant.id) {
           await supabase.auth.signOut();
-          setState('access_denied');
+          setEmailState('access_denied');
           setError('You do not have access to this business.');
           return;
         }
 
-        // Success - redirect to app
-        window.location.href = '/queue';
+        // Device is now activated — save session and redirect
+        setDeviceActivated(true);
+        saveSession(staffData.id, staffData.name, staffData.role);
+
+        const route = staffData.role === 'SERVICE_WRITER' ? '/intake'
+          : staffData.role === 'TECHNICIAN' ? '/queue'
+          : staffData.role === 'MANAGER' ? '/admin'
+          : '/login';
+        window.location.href = route;
       }
     };
 
     handleAuthCallback();
   }, [tenant]);
 
-  // Cooldown timer for resend
+  // Cooldown timer
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown(c => c - 1), 1000);
@@ -101,32 +135,94 @@ export default function LoginPage() {
     }
   }, [cooldown]);
 
+  // --- PIN PAD HANDLER ---
+  const handlePinLogin = useCallback(async (code: string) => {
+    if (!code.trim()) return;
+
+    setError(null);
+    setPinLoading(true);
+    setPinSuccess(null);
+
+    try {
+      // Query staff by ID code, scoped to the current tenant
+      let query = supabase
+        .from('staff')
+        .select('id, id_code, name, role, tenant_id')
+        .eq('id_code', code.toUpperCase())
+        .eq('active', true);
+
+      // If device is activated and we know the tenant, scope to it
+      if (tenant) {
+        query = query.eq('tenant_id', tenant.id);
+      }
+
+      const { data, error: dbError } = await query.single();
+
+      if (dbError || !data) {
+        setError('Invalid ID code');
+        setPinLoading(false);
+        setPinCode('');
+        return;
+      }
+
+      // Save localStorage session
+      saveSession(data.id_code, data.name, data.role);
+
+      // Brief success flash
+      setPinSuccess(data.name);
+
+      setTimeout(() => {
+        const route = data.role === 'SERVICE_WRITER' ? '/intake'
+          : data.role === 'TECHNICIAN' ? '/queue'
+          : data.role === 'MANAGER' ? '/admin'
+          : '/login';
+        window.location.href = route;
+      }, 400);
+    } catch (err) {
+      setError('Login failed. Try again.');
+      setPinCode('');
+    } finally {
+      setPinLoading(false);
+    }
+  }, [tenant]);
+
+  // PIN pad button press
+  const handlePinPress = (digit: string) => {
+    setError(null);
+    if (digit === 'clear') {
+      setPinCode('');
+      return;
+    }
+    if (digit === 'back') {
+      setPinCode(prev => prev.slice(0, -1));
+      return;
+    }
+    const newCode = pinCode + digit;
+    setPinCode(newCode);
+  };
+
+  // --- EMAIL HANDLER ---
   const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!email.trim() || cooldown > 0) return;
 
-    setState('sending');
+    setEmailState('sending');
     setError(null);
 
     try {
-      // Send magic link (INVITE-ONLY: user must already exist in auth.users)
       const redirectUrl = `${window.location.origin}/login`;
-
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase().trim(),
         options: {
           emailRedirectTo: redirectUrl,
-          shouldCreateUser: true, // Allow auto-creation, staff check happens after login
+          shouldCreateUser: true,
         },
       });
 
       if (authError) {
-        setState('error');
-        // Handle "user not found" error from shouldCreateUser: false
+        setEmailState('error');
         if (authError.message.includes('Signups not allowed') ||
-            authError.message.includes('User not found') ||
-            authError.message.includes('Email not confirmed')) {
+            authError.message.includes('User not found')) {
           setError('Your account must be created by an administrator.');
         } else {
           setError(authError.message);
@@ -134,14 +230,15 @@ export default function LoginPage() {
         return;
       }
 
-      setState('sent');
-      setCooldown(60); // 60 second cooldown for resend
+      setEmailState('sent');
+      setCooldown(60);
     } catch (err) {
-      setState('error');
-      setError('An unexpected error occurred. Please try again.');
+      setEmailState('error');
+      setError('An unexpected error occurred.');
     }
   };
 
+  // --- LOADING STATE ---
   if (tenantLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -150,139 +247,272 @@ export default function LoginPage() {
     );
   }
 
+  const primaryColor = tenant?.primary_color || '#0EA5E9';
+
+  // =========================================================================
+  // RENDER
+  // =========================================================================
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          {tenant?.logo_url ? (
-            <img
-              src={tenant.logo_url}
-              alt={tenant.name}
-              className="mx-auto mb-4 h-20 object-contain"
-            />
-          ) : (
-            <div
-              className="mx-auto mb-4 w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold"
-              style={{ backgroundColor: tenant?.primary_color || '#0EA5E9' }}
-            >
-              {tenant?.name?.charAt(0) || 'T'}
-            </div>
-          )}
-          <h1 className="text-2xl font-bold text-gray-800">
-            {tenant?.name || 'Job Tickets'}
-          </h1>
-          <p className="text-gray-600 mt-2">Sign in to continue</p>
-        </div>
-
-        {/* Login Card */}
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          {state === 'access_denied' ? (
-            <div className="text-center">
-              <div className="text-red-500 text-5xl mb-4">&#128683;</div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h2>
-              <p className="text-gray-600 mb-6">{error}</p>
-              <button
-                onClick={() => {
-                  setState('idle');
-                  setError(null);
-                  setEmail('');
-                }}
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
-              >
-                Try Another Email
-              </button>
-            </div>
-          ) : state === 'sent' ? (
-            <div className="text-center">
-              <div className="text-green-500 text-5xl mb-4">&#9993;</div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Check Your Email</h2>
-              <p className="text-gray-600 mb-2">
-                We sent a login link to:
-              </p>
-              <p className="font-semibold text-gray-800 mb-6">{email}</p>
-              <p className="text-sm text-gray-500 mb-6">
-                Click the link in the email to sign in. The link expires in 1 hour.
-              </p>
-
-              <button
-                onClick={handleSendMagicLink}
-                disabled={cooldown > 0}
-                className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                  cooldown > 0
-                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Link'}
-              </button>
-
-              <button
-                onClick={() => {
-                  setState('idle');
-                  setEmail('');
-                }}
-                className="mt-4 text-sm text-sky-500 hover:underline"
-              >
-                Use a different email
-              </button>
-            </div>
-          ) : state === 'verifying' ? (
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
-              <p className="text-gray-600">Verifying your login...</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSendMagicLink}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none mb-4"
-                required
-                autoFocus
-                autoComplete="email"
-              />
-
-              {error && state === 'error' && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={state === 'sending' || !email.trim()}
-                className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                  state === 'sending' || !email.trim()
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-sky-500 hover:bg-sky-600 text-white'
-                }`}
-                style={email.trim() && state !== 'sending' ? { backgroundColor: tenant?.primary_color } : undefined}
-              >
-                {state === 'sending' ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                    Sending...
-                  </span>
-                ) : (
-                  'Send Login Link'
-                )}
-              </button>
-
-              <p className="mt-4 text-xs text-gray-500 text-center">
-                A secure login link will be sent to your email.
-                <br />
-                No password required.
-              </p>
-            </form>
-          )}
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-8">
+      {/* Logo & Business Name */}
+      <div className="text-center mb-6">
+        {tenant?.logo_url ? (
+          <img
+            src={tenant.logo_url}
+            alt={tenant.name}
+            className="mx-auto mb-3 h-16 object-contain"
+          />
+        ) : (
+          <div
+            className="mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
+            style={{ backgroundColor: primaryColor }}
+          >
+            {tenant?.name?.charAt(0) || 'T'}
+          </div>
+        )}
+        <h1 className="text-xl font-bold text-gray-800">
+          {tenant?.name || 'Job Tickets'}
+        </h1>
       </div>
+
+      {/* ============== PIN PAD MODE ============== */}
+      {mode === 'pin' && (
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <p className="text-center text-gray-500 text-sm mb-4">
+              Enter your ID code to clock in
+            </p>
+
+            {/* Code Display */}
+            <div className="relative mb-5">
+              <div
+                className="w-full text-center text-3xl font-mono font-bold tracking-[0.3em] py-4 px-4 rounded-xl border-2 transition-colors"
+                style={{
+                  borderColor: error ? '#EF4444' : pinSuccess ? '#22C55E' : pinCode ? primaryColor : '#D1D5DB',
+                  backgroundColor: pinSuccess ? '#F0FDF4' : '#F9FAFB',
+                  color: pinSuccess ? '#16A34A' : '#1F2937',
+                }}
+              >
+                {pinSuccess ? (
+                  <span className="text-xl">✓ {pinSuccess}</span>
+                ) : (
+                  pinCode || <span className="text-gray-300">_ _ _ _</span>
+                )}
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && mode === 'pin' && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm text-center mb-4">
+                {error}
+              </div>
+            )}
+
+            {/* Number Pad */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                <button
+                  key={digit}
+                  onClick={() => handlePinPress(digit)}
+                  disabled={pinLoading || !!pinSuccess}
+                  className="py-4 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 active:scale-95 transition-all text-gray-800 disabled:opacity-50"
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                onClick={() => handlePinPress('clear')}
+                disabled={pinLoading || !!pinSuccess}
+                className="py-4 text-sm font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-all text-gray-500 disabled:opacity-50"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => handlePinPress('0')}
+                disabled={pinLoading || !!pinSuccess}
+                className="py-4 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 active:scale-95 transition-all text-gray-800 disabled:opacity-50"
+              >
+                0
+              </button>
+              <button
+                onClick={() => handlePinPress('back')}
+                disabled={pinLoading || !!pinSuccess}
+                className="py-4 text-xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-all text-gray-500 disabled:opacity-50"
+              >
+                ⌫
+              </button>
+            </div>
+
+            {/* GO Button */}
+            <button
+              onClick={() => handlePinLogin(pinCode)}
+              disabled={!pinCode.trim() || pinLoading || !!pinSuccess}
+              className="w-full py-4 rounded-xl text-white text-lg font-bold transition-all disabled:opacity-40"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {pinLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                  Checking...
+                </span>
+              ) : (
+                'Sign In'
+              )}
+            </button>
+
+            {/* Also support typing letters for codes like SW01, T01 */}
+            <div className="mt-3">
+              <input
+                type="text"
+                value={pinCode}
+                onChange={(e) => {
+                  setError(null);
+                  setPinCode(e.target.value.toUpperCase());
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && pinCode.trim()) {
+                    handlePinLogin(pinCode);
+                  }
+                }}
+                placeholder="Or type code (e.g. SW01)"
+                className="w-full text-center text-sm py-2 px-3 border border-gray-200 rounded-lg focus:border-sky-400 focus:ring-1 focus:ring-sky-200 outline-none text-gray-600"
+                maxLength={10}
+              />
+            </div>
+          </div>
+
+          {/* Switch to email login */}
+          <div className="text-center mt-5">
+            <button
+              onClick={() => { setMode('email'); setError(null); }}
+              className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Manager / First-time setup →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============== EMAIL MODE ============== */}
+      {mode === 'email' && (
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            {emailState === 'access_denied' ? (
+              <div className="text-center">
+                <div className="text-red-500 text-5xl mb-4">🚫</div>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h2>
+                <p className="text-gray-600 mb-6">{error}</p>
+                <button
+                  onClick={() => {
+                    setEmailState('idle');
+                    setError(null);
+                    setEmail('');
+                  }}
+                  className="w-full text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Try Another Email
+                </button>
+              </div>
+            ) : emailState === 'sent' ? (
+              <div className="text-center">
+                <div className="text-green-500 text-5xl mb-4">✉️</div>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Check Your Email</h2>
+                <p className="text-gray-600 mb-1">We sent a login link to:</p>
+                <p className="font-semibold text-gray-800 mb-5">{email}</p>
+                <p className="text-sm text-gray-500 mb-5">
+                  Click the link in the email to sign in. The link expires in 1 hour.
+                </p>
+
+                <button
+                  onClick={handleSendMagicLink}
+                  disabled={cooldown > 0}
+                  className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+                    cooldown > 0
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Link'}
+                </button>
+
+                <button
+                  onClick={() => { setEmailState('idle'); setEmail(''); }}
+                  className="mt-3 text-sm text-sky-500 hover:underline"
+                >
+                  Use a different email
+                </button>
+              </div>
+            ) : emailState === 'verifying' ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
+                <p className="text-gray-600">Verifying your login...</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMagicLink}>
+                <h2 className="text-lg font-bold text-gray-800 mb-1">Manager Sign In</h2>
+                <p className="text-sm text-gray-500 mb-5">
+                  Use email to activate this device or sign in as manager.
+                </p>
+
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none mb-4"
+                  required
+                  autoFocus
+                  autoComplete="email"
+                />
+
+                {error && emailState === 'error' && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={emailState === 'sending' || !email.trim()}
+                  className={`w-full py-3 rounded-lg font-semibold transition-colors text-white ${
+                    emailState === 'sending' || !email.trim()
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : ''
+                  }`}
+                  style={email.trim() && emailState !== 'sending' ? { backgroundColor: primaryColor } : undefined}
+                >
+                  {emailState === 'sending' ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                      Sending...
+                    </span>
+                  ) : (
+                    'Send Login Link'
+                  )}
+                </button>
+
+                <p className="mt-3 text-xs text-gray-400 text-center">
+                  A secure login link will be sent to your email.
+                </p>
+              </form>
+            )}
+          </div>
+
+          {/* Back to PIN pad */}
+          <div className="text-center mt-5">
+            <button
+              onClick={() => { setMode('pin'); setError(null); setEmailState('idle'); }}
+              className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ← Back to ID code login
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
