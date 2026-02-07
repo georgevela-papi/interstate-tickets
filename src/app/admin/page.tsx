@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSession, clearSession } from '@/lib/supabase';
+import { supabase, getSession, clearSession } from '@/lib/supabase';
 import TechnicianManager from '@/components/TechnicianManager';
 import ReportsDashboard from '@/components/ReportsDashboard';
 import CompletedJobsManager from '@/components/CompletedJobsManager';
@@ -23,8 +23,10 @@ export default function AdminPage() {
     setSession(currentSession);
   }, [router]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearSession();
+    await supabase.auth.signOut();
+    Object.keys(localStorage).forEach((key) => { if (key.startsWith('sb-')) localStorage.removeItem(key); });
     router.push('/');
   };
 

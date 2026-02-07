@@ -50,8 +50,10 @@ function IntakeContent() {
     }
   }, [searchParams]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     clearSession();
+    await supabase.auth.signOut();
+    Object.keys(localStorage).forEach((key) => { if (key.startsWith('sb-')) localStorage.removeItem(key); });
     router.push('/');
   };
 
