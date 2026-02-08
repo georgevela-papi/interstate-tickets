@@ -89,7 +89,23 @@ export default function QueuePage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              {session?.role === 'MANAGER' && (
+                <>
+                  <button
+                    onClick={() => router.push('/admin')}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    Admin
+                  </button>
+                  <button
+                    onClick={() => router.push('/intake')}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    Intake
+                  </button>
+                </>
+              )}
               <button
                 onClick={loadTickets}
                 className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
@@ -101,7 +117,8 @@ export default function QueuePage() {
               </button>
               <button
                 onClick={handleLogout}
-                className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
+                className="bg-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                style={{ color: tenant?.primary_color || '#6B7280' }}
               >
                 Logout
               </button>
