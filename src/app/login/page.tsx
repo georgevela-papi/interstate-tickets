@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase, saveSession } from '@/lib/supabase';
 import { useTenant } from '@/lib/tenant-context';
 
@@ -23,6 +24,7 @@ interface StaffInfo {
 
 export default function LoginPage() {
   const { tenant, staff, loading: tenantLoading, isAuthenticated } = useTenant();
+  const router = useRouter();
 
   // --- Shared ---
   const [mode, setMode] = useState<LoginMode>('pin');
@@ -59,7 +61,7 @@ export default function LoginPage() {
         : staff.role === 'TECHNICIAN' ? '/queue'
         : staff.role === 'MANAGER' ? '/admin'
         : '/login';
-      window.location.href = route;
+      router.push(route);
     }
   }, [isAuthenticated, staff]);
 
@@ -120,7 +122,7 @@ export default function LoginPage() {
           : staffData.role === 'TECHNICIAN' ? '/queue'
           : staffData.role === 'MANAGER' ? '/admin'
           : '/login';
-        window.location.href = route;
+        router.push(route);
       }
     };
 
@@ -176,7 +178,7 @@ export default function LoginPage() {
           : data.role === 'TECHNICIAN' ? '/queue'
           : data.role === 'MANAGER' ? '/admin'
           : '/login';
-        window.location.href = route;
+        router.push(route);
       }, 400);
     } catch (err) {
       setError('Login failed. Try again.');
