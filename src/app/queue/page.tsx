@@ -13,6 +13,7 @@ export default function QueuePage() {
   const [selectedTicket, setSelectedTicket] = useState<ActiveQueueItem | null>(null);
   const [session, setSession] = useState<any>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [tenant, setTenant] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -23,6 +24,15 @@ export default function QueuePage() {
     }
     setSession(currentSession);
     loadTickets();
+
+    // Load tenant branding
+    supabase
+      .from('tenants_public')
+      .select('name, logo_url, primary_color, secondary_color')
+      .single()
+      .then(({ data }: { data: any }) => {
+        if (data) setTenant(data);
+      });
 
     const channel = subscribeToQueue(() => {
       setLastUpdate(new Date());
@@ -58,21 +68,23 @@ export default function QueuePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-sky-500 text-white shadow-lg">
+      <header className="text-white shadow-lg" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="relative w-16 h-12">
-                <Image
-                  src="https://interstatetire.online/logo.png"
-                  alt="Interstate Tires"
-                  fill
-                  className="object-contain"
-                />
-              </div>
+              {tenant?.logo_url && (
+                <div className="relative w-16 h-12">
+                  <Image
+                    src={tenant.logo_url}
+                    alt={tenant?.name || 'Logo'}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              )}
               <div>
                 <h1 className="text-2xl font-bold">Job Queue ({tickets.length})</h1>
-                <p className="text-sm text-sky-100">
+                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
                   {session.name} • Updated {lastUpdate.toLocaleTimeString()}
                 </p>
               </div>

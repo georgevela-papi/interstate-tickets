@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [session, setSession] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'technicians' | 'reports' | 'completed' | 'customers'>('technicians');
   const router = useRouter();
+  const [tenant, setTenant] = useState<any>(null);
 
   useEffect(() => {
     const currentSession = getSession();
@@ -21,6 +22,15 @@ export default function AdminPage() {
       return;
     }
     setSession(currentSession);
+
+    // Load tenant branding
+    supabase
+      .from('tenants_public')
+      .select('name, logo_url, primary_color, secondary_color')
+      .single()
+      .then(({ data }: { data: any }) => {
+        if (data) setTenant(data);
+      });
   }, [router]);
 
   const handleLogout = async () => {
@@ -35,17 +45,17 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header — Desktop */}
-      <header className="bg-sky-500 text-white shadow-lg">
+      <header className="text-white shadow-lg" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
         <div className="container mx-auto px-4 py-4">
           {/* Desktop header */}
           <div className="hidden md:flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="relative w-16 h-12">
-                <Image src="https://interstatetire.online/logo.png" alt="Interstate Tires" fill className="object-contain" />
+                {tenant?.logo_url ? <Image src={tenant.logo_url} alt={tenant?.name || 'Logo'} fill className="object-contain" /> : null}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-                <p className="text-sm text-sky-100">Logged in as {session.name}</p>
+                <h1 className="text-2xl font-bold">{tenant?.name || 'Admin Dashboard'}</h1>
+                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Logged in as {session.name}</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -56,7 +66,7 @@ export default function AdminPage() {
               <button onClick={() => router.push('/queue')} className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors">
                 View Queue
               </button>
-              <button onClick={handleLogout} className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors">
+              <button onClick={handleLogout} className="bg-white px-4 py-2 rounded-lg font-semibold transition-colors" style={{ color: tenant?.primary_color || '#6B7280' }}>
                 Logout
               </button>
             </div>
@@ -66,14 +76,14 @@ export default function AdminPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="relative w-12 h-10">
-                  <Image src="https://interstatetire.online/logo.png" alt="Interstate Tires" fill className="object-contain" />
+                  {tenant?.logo_url ? <Image src={tenant.logo_url} alt={tenant?.name || 'Logo'} fill className="object-contain" /> : null}
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold leading-tight">Admin Dashboard</h1>
-                  <p className="text-xs text-sky-100">Logged in as {session.name}</p>
+                  <h1 className="text-lg font-bold leading-tight">{tenant?.name || 'Admin Dashboard'}</h1>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>Logged in as {session.name}</p>
                 </div>
               </div>
-              <button onClick={handleLogout} className="bg-white text-sky-600 px-3 py-1.5 rounded-lg text-sm font-semibold">
+              <button onClick={handleLogout} className="bg-white px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ color: tenant?.primary_color || '#6B7280' }}>
                 Logout
               </button>
             </div>

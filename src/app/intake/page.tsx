@@ -19,6 +19,7 @@ function IntakeContent() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState<string | null>(null);
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+  const [tenant, setTenant] = useState<any>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -29,6 +30,15 @@ function IntakeContent() {
       return;
     }
     setSession(currentSession);
+
+    // Load tenant branding
+    supabase
+      .from('tenants_public')
+      .select('name, logo_url, primary_color, secondary_color')
+      .single()
+      .then(({ data }) => {
+        if (data) setTenant(data);
+      });
   }, [router]);
 
   // Load customer from query param
@@ -61,7 +71,6 @@ function IntakeContent() {
     setCustomerId(null);
     setCustomerName(null);
     setCustomerPhone(null);
-    // Remove query param from URL without navigation
     router.replace('/intake');
   };
 
@@ -85,11 +94,8 @@ function IntakeContent() {
 
       let finalCustomerId = customerId;
 
-      // Auto-create customer from form data if no customer linked
       if (!finalCustomerId && data.customerName && data.customerPhone) {
         const phoneNormalized = normalizePhone(data.customerPhone);
-
-        // Try to find existing customer by phone
         const { data: existing } = await supabase
           .from('customers')
           .select('id')
@@ -98,13 +104,11 @@ function IntakeContent() {
 
         if (existing) {
           finalCustomerId = existing.id;
-          // Update their last_vehicle_text
           await supabase
             .from('customers')
             .update({ last_vehicle_text: data.vehicle })
             .eq('id', existing.id);
         } else {
-          // Create new customer
           const { data: newCustomer } = await supabase
             .from('customers')
             .insert({
@@ -138,7 +142,6 @@ function IntakeContent() {
 
       if (error) throw error;
 
-      // Update customer's last_vehicle_text if using pre-linked customer from query params
       if (customerId && finalCustomerId === customerId) {
         await supabase
           .from('customers')
@@ -146,12 +149,10 @@ function IntakeContent() {
           .eq('id', finalCustomerId);
       }
 
-      // Show success toast
       setToastMessage(`Ticket #${ticket.ticket_number} created!`);
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
       setSelectedService(null);
-      // Clear customer if it came from query params
       if (searchParams.get('customer_id')) {
         handleRemoveCustomer();
       }
@@ -165,32 +166,56 @@ function IntakeContent() {
 
   if (!session) return null;
 
+  const brandColor = tenant?.primary_color || '#6B7280';
+  const isManager = session.role === 'MANAGER';
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-sky-500 text-white shadow-lg">
+      <header className="text-white shadow-lg" style={{ backgroundColor: brandColor }}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="relative w-16 h-12">
-                <Image
-                  src="https://interstatetire.online/logo.png"
-                  alt="Interstate Tires"
-                  fill
-                  className="object-contain"
-                />
-              </div>
+              {tenant?.logo_url && (
+                <div className="relative w-16 h-12">
+                  <Image
+                    src={tenant.logo_url}
+                    alt={tenant?.name || 'Logo'}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              )}
               <div>
-                <h1 className="text-2xl font-bold">Create Ticket</h1>
-                <p className="text-sm text-sky-100">Logged in as {session.name}</p>
+                <h1 className="text-2xl font-bold">{tenant?.name || 'Create Ticket'}</h1>
+                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Service Writer: {session.name}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-2">
+              {isManager && (
+                <>
+                  <button
+                    onClick={() => router.push('/admin')}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    Admin
+                  </button>
+                  <button
+                    onClick={() => router.push('/queue')}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    Queue
+                  </button>
+                </>
+              )}
+              <button
+                onClick={handleLogout}
+                className="bg-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                style={{ color: brandColor }}
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -198,22 +223,22 @@ function IntakeContent() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
-          {/* Customer Banner */}
           {customerName && (
-            <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-3 flex items-center justify-between">
+            <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
               <div>
-                <span className="text-sky-800 font-semibold">
+                <span className="font-semibold" style={{ color: brandColor }}>
                   Customer: {customerName}
                 </span>
                 {customerPhone && (
-                  <span className="text-sky-600 ml-2 text-sm">
+                  <span className="ml-2 text-sm" style={{ color: brandColor, opacity: 0.7 }}>
                     ({formatPhone(customerPhone)})
                   </span>
                 )}
               </div>
               <button
                 onClick={handleRemoveCustomer}
-                className="text-sky-600 text-sm hover:underline"
+                className="text-sm hover:underline"
+                style={{ color: brandColor }}
               >
                 Remove
               </button>
