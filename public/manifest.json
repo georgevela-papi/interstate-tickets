@@ -2,7 +2,7 @@
   "name": "Interstate Tires Job Tickets",
   "short_name": "Interstate",
   "description": "Internal job ticket management system",
-  "start_url": "/",
+  "start_url": "/login",
   "display": "standalone",
   "background_color": "#38B6FF",
   "theme_color": "#38B6FF",
@@ -18,5 +18,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "scope": "/"
 }
