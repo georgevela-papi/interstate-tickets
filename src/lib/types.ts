@@ -5,15 +5,15 @@ export type TicketStatus = 'PENDING' | 'COMPLETED';
 export type PriorityLevel = 'LOW' | 'NORMAL' | 'HIGH';
 export type StaffRole = 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER';
 
-export type ServiceType =
-  | 'MOUNT_BALANCE'
-  | 'FLAT_REPAIR'
-  | 'ROTATION'
-  | 'NEW_TIRES'
-  | 'USED_TIRES'
-  | 'DETAILING'
-  | 'MAINTENANCE'
-  | 'APPOINTMENT';
+// ServiceType is now a dynamic string (slug from service_types table).
+// Legacy slugs kept as constants for hardcoded field fallback.
+export type ServiceType = string;
+
+export const LEGACY_SERVICE_SLUGS = [
+  'MOUNT_BALANCE', 'FLAT_REPAIR', 'ROTATION', 'NEW_TIRES',
+  'USED_TIRES', 'DETAILING', 'MAINTENANCE', 'APPOINTMENT',
+] as const;
+export type LegacyServiceType = (typeof LEGACY_SERVICE_SLUGS)[number];
 
 export interface Staff {
   id: string;
@@ -97,7 +97,7 @@ export type ServiceData =
   | DetailingData
   | AppointmentData
   | MaintenanceData
-  | Record<string, never>;
+  | Record<string, any>;
 
 export interface MountBalanceData {
   tire_count: number;
@@ -126,7 +126,7 @@ export interface AppointmentData {
   phone: string;
   scheduled_date: string;
   scheduled_time: string;
-  appointment_service: ServiceType;
+  appointment_service: string;
 }
 
 export interface MaintenanceData {
@@ -148,7 +148,8 @@ export interface ServiceFieldConfig {
   errorMessage?: string;
 }
 
-export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
+// Fallback labels for legacy service types (used when DB data unavailable)
+export const SERVICE_TYPE_LABELS: Record<string, string> = {
   MOUNT_BALANCE: 'Mount/Balance',
   FLAT_REPAIR: 'Flat Repair',
   ROTATION: 'Rotation',
@@ -158,6 +159,33 @@ export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   MAINTENANCE: 'Maintenance',
   APPOINTMENT: 'Appointment',
 };
+
+// Database service type record (from service_types table)
+export interface DbServiceType {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  base_price: number;
+  estimated_minutes: number;
+  icon: string | null;
+  active: boolean;
+  display_order: number;
+}
+
+// Database service field record (from service_fields table)
+export interface DbServiceField {
+  id: string;
+  service_type_id: string;
+  field_key: string;
+  field_label: string;
+  field_type: string;
+  placeholder: string | null;
+  options: any;
+  required: boolean;
+  width: string;
+  display_order: number;
+}
 
 export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
   LOW: 'Low',
@@ -171,8 +199,8 @@ export const PRIORITY_COLORS: Record<PriorityLevel, string> = {
   LOW: 'bg-blue-100 border-blue-500 text-blue-900',
 };
 
-// Services that can be booked as an appointment
-export const APPOINTABLE_SERVICES: { value: ServiceType; label: string }[] = [
+// Fallback appointable services (used when DB data unavailable)
+export const APPOINTABLE_SERVICES: { value: string; label: string }[] = [
   { value: 'MOUNT_BALANCE', label: 'Mount/Balance' },
   { value: 'FLAT_REPAIR', label: 'Flat Repair' },
   { value: 'ROTATION', label: 'Rotation' },

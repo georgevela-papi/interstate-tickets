@@ -4,6 +4,10 @@ import type { ActiveQueueItem, PriorityLevel } from '@/lib/types';
 import { SERVICE_TYPE_LABELS } from '@/lib/types';
 import { getTimeElapsed, getServiceDataText } from '@/lib/utils';
 
+function getServiceLabel(slug: string): string {
+  return SERVICE_TYPE_LABELS[slug] || slug.replace(/_/g, ' ');
+}
+
 interface QueueListProps {
   tickets: ActiveQueueItem[];
   onTicketClick: (ticket: ActiveQueueItem) => void;
@@ -78,7 +82,7 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
                         </p>
                       )}
                       <p className="text-sm text-gray-500">
-                        {SERVICE_TYPE_LABELS[ticket.service_type]} •{' '}
+                        {getServiceLabel(ticket.service_type)} •{' '}
                         {getServiceDataText(ticket.service_type, ticket.service_data)}
                       </p>
                     </div>

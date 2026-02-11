@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, getSession, clearSession } from '@/lib/supabase';
 import ServicePicker from '@/components/ServicePicker';
 import DynamicServiceForm from '@/components/DynamicServiceForm';
-import type { ServiceType } from '@/lib/types';
-import { formatPhone } from '@/lib/types';
+import type { DbServiceType, DbServiceField } from '@/lib/types';
+import { SERVICE_TYPE_LABELS, formatPhone } from '@/lib/types';
 import { normalizePhone } from '@/lib/utils';
 import Image from 'next/image';
 
 function IntakeContent() {
-  const [selectedService, setSelectedService] = useState<ServiceType | null>(null);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -19,9 +19,13 @@ function IntakeContent() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState<string | null>(null);
   const [customerPhone, setCustomerPhone] = useState<string | null>(null);
-  const [tenant, setTenant] = useState<any>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Dynamic service data from DB
+  const [serviceTypes, setServiceTypes] = useState<DbServiceType[]>([]);
+  const [serviceFields, setServiceFields] = useState<DbServiceField[]>([]);
+  const [loadingServices, setLoadingServices] = useState(true);
 
   useEffect(() => {
     const currentSession = getSession();
@@ -30,16 +34,38 @@ function IntakeContent() {
       return;
     }
     setSession(currentSession);
-
-    // Load tenant branding
-    supabase
-      .from('tenants_public')
-      .select('name, logo_url, primary_color, secondary_color')
-      .single()
-      .then(({ data }) => {
-        if (data) setTenant(data);
-      });
   }, [router]);
+
+  // Fetch service_types and service_fields from the database
+  useEffect(() => {
+    async function loadServices() {
+      try {
+        const [typesRes, fieldsRes] = await Promise.all([
+          supabase
+            .from('service_types')
+            .select('*')
+            .eq('active', true)
+            .order('display_order', { ascending: true }),
+          supabase
+            .from('service_fields')
+            .select('*')
+            .order('display_order', { ascending: true }),
+        ]);
+
+        if (typesRes.data && typesRes.data.length > 0) {
+          setServiceTypes(typesRes.data);
+        }
+        if (fieldsRes.data) {
+          setServiceFields(fieldsRes.data);
+        }
+      } catch (err) {
+        console.error('Error loading services:', err);
+      } finally {
+        setLoadingServices(false);
+      }
+    }
+    loadServices();
+  }, []);
 
   // Load customer from query param
   useEffect(() => {
@@ -74,6 +100,17 @@ function IntakeContent() {
     router.replace('/intake');
   };
 
+  // Look up the DbServiceType record and its fields for the selected slug
+  const selectedServiceRecord = serviceTypes.find((s) => s.slug === selectedService);
+  const selectedServiceFields = selectedServiceRecord
+    ? serviceFields.filter((f) => f.service_type_id === selectedServiceRecord.id)
+    : [];
+
+  // Build a display name for the selected service
+  const selectedServiceName = selectedServiceRecord?.name
+    || SERVICE_TYPE_LABELS[selectedService || '']
+    || (selectedService || '').replace(/_/g, ' ');
+
   const handleSubmit = async (data: {
     vehicle: string;
     priority: any;
@@ -94,8 +131,10 @@ function IntakeContent() {
 
       let finalCustomerId = customerId;
 
+      // Auto-create customer from form data if no customer linked
       if (!finalCustomerId && data.customerName && data.customerPhone) {
         const phoneNormalized = normalizePhone(data.customerPhone);
+
         const { data: existing } = await supabase
           .from('customers')
           .select('id')
@@ -166,56 +205,32 @@ function IntakeContent() {
 
   if (!session) return null;
 
-  const brandColor = tenant?.primary_color || '#6B7280';
-  const isManager = session.role === 'MANAGER';
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="text-white shadow-lg" style={{ backgroundColor: brandColor }}>
+      <header className="bg-sky-500 text-white shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              {tenant?.logo_url && (
-                <div className="relative w-16 h-12">
-                  <Image
-                    src={tenant.logo_url}
-                    alt={tenant?.name || 'Logo'}
-                    fill
-                    className="object-contain"
-                  />
-                </div>
-              )}
+              <div className="relative w-16 h-12">
+                <Image
+                  src="https://interstatetire.online/logo.png"
+                  alt="Interstate Tires"
+                  fill
+                  className="object-contain"
+                />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold">{tenant?.name || 'Create Ticket'}</h1>
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Service Writer: {session.name}</p>
+                <h1 className="text-2xl font-bold">Create Ticket</h1>
+                <p className="text-sm text-sky-100">Logged in as {session.name}</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              {isManager && (
-                <>
-                  <button
-                    onClick={() => router.push('/admin')}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    Admin
-                  </button>
-                  <button
-                    onClick={() => router.push('/queue')}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                  >
-                    Queue
-                  </button>
-                </>
-              )}
-              <button
-                onClick={handleLogout}
-                className="bg-white px-4 py-2 rounded-lg font-semibold transition-colors"
-                style={{ color: brandColor }}
-              >
-                Logout
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>
@@ -223,22 +238,22 @@ function IntakeContent() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
+          {/* Customer Banner */}
           {customerName && (
-            <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between">
+            <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-3 flex items-center justify-between">
               <div>
-                <span className="font-semibold" style={{ color: brandColor }}>
+                <span className="text-sky-800 font-semibold">
                   Customer: {customerName}
                 </span>
                 {customerPhone && (
-                  <span className="ml-2 text-sm" style={{ color: brandColor, opacity: 0.7 }}>
+                  <span className="text-sky-600 ml-2 text-sm">
                     ({formatPhone(customerPhone)})
                   </span>
                 )}
               </div>
               <button
                 onClick={handleRemoveCustomer}
-                className="text-sm hover:underline"
-                style={{ color: brandColor }}
+                className="text-sky-600 text-sm hover:underline"
               >
                 Remove
               </button>
@@ -246,16 +261,21 @@ function IntakeContent() {
           )}
 
           <div className="card">
-            {!selectedService ? (
+            {loadingServices ? (
+              <div className="flex justify-center py-12">
+                <div className="spinner"></div>
+              </div>
+            ) : !selectedService ? (
               <ServicePicker
                 selectedService={selectedService}
                 onSelect={setSelectedService}
+                services={serviceTypes}
               />
             ) : (
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-gray-800">
-                    {selectedService.replace(/_/g, ' ')}
+                    {selectedServiceName}
                   </h2>
                   <button
                     onClick={() => setSelectedService(null)}
@@ -266,6 +286,8 @@ function IntakeContent() {
                 </div>
                 <DynamicServiceForm
                   serviceType={selectedService}
+                  serviceRecord={selectedServiceRecord}
+                  dbFields={selectedServiceFields}
                   onSubmit={handleSubmit}
                   onCancel={() => setSelectedService(null)}
                 />

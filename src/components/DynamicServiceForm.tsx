@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import type { ServiceType, PriorityLevel } from '@/lib/types';
+import type { PriorityLevel, ServiceFieldConfig, DbServiceType, DbServiceField } from '@/lib/types';
 import { PRIORITY_LABELS } from '@/lib/types';
 import { SERVICE_FIELDS } from '@/lib/utils';
 import { formatPhone } from '@/lib/types';
 
 interface DynamicServiceFormProps {
-  serviceType: ServiceType;
+  serviceType: string;
+  serviceRecord?: DbServiceType;
+  dbFields?: DbServiceField[];
   onSubmit: (data: {
     vehicle: string;
     priority: PriorityLevel;
@@ -20,8 +22,31 @@ interface DynamicServiceFormProps {
   onCancel: () => void;
 }
 
+// Convert DB field records to the ServiceFieldConfig format the renderer understands
+function dbFieldToConfig(f: DbServiceField): ServiceFieldConfig {
+  let options: ServiceFieldConfig['options'] = undefined;
+  if (f.options) {
+    // options can be: string[] OR {value,label}[] OR comma-separated string
+    if (Array.isArray(f.options)) {
+      options = f.options;
+    } else if (typeof f.options === 'string') {
+      options = f.options.split(',').map((s: string) => s.trim());
+    }
+  }
+  return {
+    name: f.field_key,
+    label: f.field_label,
+    type: f.field_type as ServiceFieldConfig['type'],
+    required: f.required,
+    placeholder: f.placeholder || undefined,
+    options,
+  };
+}
+
 export default function DynamicServiceForm({
   serviceType,
+  serviceRecord,
+  dbFields,
   onSubmit,
   onCancel,
 }: DynamicServiceFormProps) {
@@ -30,11 +55,17 @@ export default function DynamicServiceForm({
   const [notes, setNotes] = useState('');
   const [serviceData, setServiceData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // FIX 1C: customer info collected for ALL service types
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
-  const fields = SERVICE_FIELDS[serviceType];
+  // Use DB fields if available, otherwise fall back to hardcoded SERVICE_FIELDS
+  const fields: ServiceFieldConfig[] =
+    dbFields && dbFields.length > 0
+      ? dbFields
+          .sort((a, b) => a.display_order - b.display_order)
+          .map(dbFieldToConfig)
+      : SERVICE_FIELDS[serviceType] || [];
+
   const isAppointment = serviceType === 'APPOINTMENT';
 
   const handleFieldChange = (name: string, value: any) => {
@@ -51,7 +82,6 @@ export default function DynamicServiceForm({
       newErrors.vehicle = 'Vehicle is required';
     }
 
-    // FIX 1C: validate customer info for ALL types
     if (!customerName.trim()) {
       newErrors.customerName = 'Customer name is required';
     }
@@ -85,7 +115,6 @@ export default function DynamicServiceForm({
 
     const formattedPhone = formatPhone(customerPhone);
 
-    // FIX 1B: Build scheduled_time from date + time for appointments
     let scheduledTime = null;
     if (serviceType === 'APPOINTMENT' && serviceData.scheduled_date && serviceData.scheduled_time) {
       scheduledTime = `${serviceData.scheduled_date}T${serviceData.scheduled_time}:00`;
@@ -93,7 +122,6 @@ export default function DynamicServiceForm({
 
     onSubmit({
       vehicle,
-      // FIX 1B: Appointments don't have user-selectable priority; default NORMAL
       priority: isAppointment ? 'NORMAL' : priority,
       serviceData,
       scheduledTime,
@@ -103,7 +131,7 @@ export default function DynamicServiceForm({
     });
   };
 
-  const renderField = (field: (typeof fields)[0]) => {
+  const renderField = (field: ServiceFieldConfig) => {
     const value = serviceData[field.name] || '';
     const hasError = !!errors[field.name];
 
@@ -213,9 +241,12 @@ export default function DynamicServiceForm({
     }
   };
 
+  // Display name from DB record or formatted slug
+  const serviceName = serviceRecord?.name || serviceType.replace(/_/g, ' ');
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* ── FIX 1C: Customer Info (all service types) ── */}
+      {/* Customer Info */}
       <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 space-y-4">
         <h3 className="font-semibold text-sky-800">Customer Information</h3>
         <div>

@@ -1,14 +1,14 @@
 // Utility functions for service forms and validation
 // Updated: Fix pass
 
-import type { ServiceType, ServiceFieldConfig } from './types';
+import type { ServiceFieldConfig } from './types';
 import { validateTireSize, validatePhone } from './types';
 
-// Service-SPECIFIC field definitions.
-// customer_name and customer_phone are now collected globally
-// on ALL service types (handled in DynamicServiceForm), so they
-// are NOT listed here.
-export const SERVICE_FIELDS: Record<ServiceType, ServiceFieldConfig[]> = {
+// Hardcoded field definitions for legacy service types.
+// New services added via Command Center use service_fields table instead.
+// customer_name and customer_phone are collected globally
+// on ALL service types (handled in DynamicServiceForm).
+export const SERVICE_FIELDS: Record<string, ServiceFieldConfig[]> = {
   MOUNT_BALANCE: [
     {
       name: 'tire_count',
@@ -197,7 +197,7 @@ export function getTimeElapsed(createdAt: string): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
-export function getServiceDataText(serviceType: ServiceType, data: any): string {
+export function getServiceDataText(serviceType: string, data: any): string {
   if (!data) return '';
 
   switch (serviceType) {
@@ -218,8 +218,12 @@ export function getServiceDataText(serviceType: ServiceType, data: any): string 
       return data.maintenance_type || data.description || 'General maintenance';
     case 'APPOINTMENT':
       return `${data.customer_name || ''} - ${data.phone || ''}`;
-    default:
-      return '';
+    default: {
+      // Dynamic services: summarize the JSONB service_data keys
+      const entries = Object.entries(data).filter(([, v]) => v != null && v !== '');
+      if (entries.length === 0) return '';
+      return entries.map(([, v]) => String(v)).join(' · ');
+    }
   }
 }
 

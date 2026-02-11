@@ -6,6 +6,10 @@ import type { ActiveQueueItem } from '@/lib/types';
 import { SERVICE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/types';
 import { formatDateTime, getServiceDataText } from '@/lib/utils';
 
+function getServiceLabel(slug: string): string {
+  return SERVICE_TYPE_LABELS[slug] || slug.replace(/_/g, ' ');
+}
+
 interface TicketDetailModalProps {
   ticket: ActiveQueueItem;
   onClose: () => void;
@@ -92,7 +96,7 @@ export default function TicketDetailModal({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-lg font-semibold text-sky-600">
-              {SERVICE_TYPE_LABELS[ticket.service_type]}
+              {getServiceLabel(ticket.service_type)}
             </span>
             <span
               className={`px-3 py-1 rounded-full text-sm font-bold ${
