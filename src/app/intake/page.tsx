@@ -212,9 +212,9 @@ function IntakeContent() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-sky-500 text-white shadow-lg">
+      <header className="bg-sky-500 text-white shadow-lg ring-1 ring-white/10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -227,7 +227,7 @@ function IntakeContent() {
                 />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Create Ticket</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Create Ticket</h1>
                 <p className="text-sm text-sky-100">Logged in as {session.name}</p>
               </div>
             </div>
@@ -344,7 +344,7 @@ function IntakeContent() {
 
 export default function IntakePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="spinner"></div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="spinner"></div></div>}>
       <IntakeContent />
     </Suspense>
   );
