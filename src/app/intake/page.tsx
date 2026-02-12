@@ -194,7 +194,7 @@ function IntakeContent() {
 
       setToastMessage(`Ticket #${ticket.ticket_number} created!`);
       setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
+      setTimeout(() => setShowToast(false), 5000);
       setSelectedService(null);
 
       if (searchParams.get('customer_id')) {
@@ -310,16 +310,33 @@ function IntakeContent() {
         </div>
       </main>
 
+      {/* Success Toast â large centered banner */}
       {showToast && (
-        <div className="fixed top-4 right-4 z-50 toast-enter">
-          <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center space-x-3">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="font-semibold">{toastMessage}</span>
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center pt-4 px-4">
+          <div
+            className="bg-green-600 text-white px-8 py-5 rounded-xl shadow-2xl flex items-center space-x-4 max-w-lg w-full"
+            style={{ animation: 'slideDown 0.3s ease-out' }}
+          >
+            <div className="flex-shrink-0 bg-white bg-opacity-20 rounded-full p-2">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-lg font-bold">{toastMessage}</p>
+              <p className="text-green-100 text-sm">Ticket sent to queue</p>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Inline keyframe for toast animation */}
+      <style jsx>{`
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
