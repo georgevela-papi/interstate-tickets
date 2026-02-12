@@ -7,7 +7,7 @@ import { SERVICE_TYPE_LABELS, PRIORITY_LABELS } from '@/lib/types';
 import { formatDateTime, getServiceDataText } from '@/lib/utils';
 
 function getServiceLabel(slug: string): string {
-  return SERVICE_TYPE_LABELS[slug] || slug.replace(/_/g, ' ');
+  return SERVICE_TYPE_LABELS[slug] || slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 interface TicketDetailModalProps {
@@ -24,11 +24,15 @@ export default function TicketDetailModal({
   canComplete = true,
 }: TicketDetailModalProps) {
   const [loading, setLoading] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(false);
 
-  // FIX 2A: Auto-determine technician from logged-in session
   const handleComplete = async () => {
-    setShowConfirm(false);
+    // First click shows confirmation, second click actually completes
+    if (!confirmStep) {
+      setConfirmStep(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const session = getSession();
@@ -37,7 +41,6 @@ export default function TicketDetailModal({
         return;
       }
 
-      // Look up the technician record for the logged-in staff member
       const { data: staffData } = await supabase
         .from('staff')
         .select('id')
@@ -72,6 +75,7 @@ export default function TicketDetailModal({
         .eq('id', ticket.id);
 
       if (error) throw error;
+
       onComplete();
       onClose();
     } catch (error) {
@@ -79,10 +83,10 @@ export default function TicketDetailModal({
       alert('Failed to complete ticket. Please try again.');
     } finally {
       setLoading(false);
+      setConfirmStep(false);
     }
   };
 
-  // Get the service details text
   const serviceDetailText = getServiceDataText(ticket.service_type, ticket.service_data);
 
   return (
@@ -93,8 +97,8 @@ export default function TicketDetailModal({
           <h2 className="text-2xl font-bold text-gray-800">
             Ticket #{ticket.ticket_number}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-            {'\u2715'}
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none p-1">
+            \u2715
           </button>
         </div>
 
@@ -109,8 +113,8 @@ export default function TicketDetailModal({
                 ticket.priority === 'HIGH'
                   ? 'bg-red-100 text-red-900'
                   : ticket.priority === 'NORMAL'
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'bg-blue-100 text-blue-900'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'bg-blue-100 text-blue-900'
               }`}
             >
               {PRIORITY_LABELS[ticket.priority]}
@@ -123,7 +127,6 @@ export default function TicketDetailModal({
               <p className="font-semibold">{ticket.vehicle}</p>
             </div>
 
-            {/* Customer info */}
             {ticket.customer_name && (
               <div>
                 <span className="text-sm text-gray-500">Customer</span>
@@ -134,7 +137,6 @@ export default function TicketDetailModal({
               </div>
             )}
 
-            {/* Service Details - show text summary, plus raw key-value pairs for dynamic services */}
             {serviceDetailText ? (
               <div>
                 <span className="text-sm text-gray-500">Service Details</span>
@@ -174,36 +176,17 @@ export default function TicketDetailModal({
             </div>
           </div>
 
-          {/* Complete button -- requires confirmation */}
           {canComplete && (
             <div className="pt-4 space-y-3">
-              {!showConfirm ? (
-                <button
-                  onClick={() => setShowConfirm(true)}
-                  disabled={loading}
-                  className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center">
-                      <span className="spinner mr-3"></span>
-                      Completing...
-                    </span>
-                  ) : (
-                    '\u2713 Complete Job'
-                  )}
-                </button>
-              ) : (
-                <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4">
-                  <p className="text-center text-amber-900 font-bold text-lg mb-3">
-                    Mark this job as complete?
+              {confirmStep ? (
+                <div className="space-y-2">
+                  <p className="text-center text-sm text-gray-600 font-medium">
+                    Complete ticket #{ticket.ticket_number} for {ticket.customer_name || 'this customer'}?
                   </p>
-                  <p className="text-center text-amber-700 text-sm mb-4">
-                    This action cannot be undone.
-                  </p>
-                  <div className="flex space-x-3">
+                  <div className="flex gap-3">
                     <button
-                      onClick={() => setShowConfirm(false)}
-                      className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-lg font-semibold transition-colors"
+                      onClick={() => setConfirmStep(false)}
+                      className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-lg font-bold transition-colors"
                     >
                       Cancel
                     </button>
@@ -212,10 +195,24 @@ export default function TicketDetailModal({
                       disabled={loading}
                       className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-lg font-bold transition-colors"
                     >
-                      {loading ? 'Completing...' : 'Yes, Complete'}
+                      {loading ? (
+                        <span className="flex items-center justify-center">
+                          <span className="spinner mr-3"></span>
+                          Completing...
+                        </span>
+                      ) : (
+                        'Yes, Complete'
+                      )}
                     </button>
                   </div>
                 </div>
+              ) : (
+                <button
+                  onClick={handleComplete}
+                  className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xl font-bold transition-colors"
+                >
+                  \u2713 Complete Job
+                </button>
               )}
             </div>
           )}
