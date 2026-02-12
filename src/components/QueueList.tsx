@@ -36,7 +36,7 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
     return (
       <div className="text-center py-16">
         <div className="text-6xl mb-4">{'\u2705'}</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">All Caught Up!</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2 tracking-tight">All Caught Up!</h2>
         <p className="text-gray-600">No pending jobs at the moment.</p>
       </div>
     );
@@ -52,7 +52,7 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
           <div key={priority}>
             <div className="flex items-center space-x-2 mb-4">
               <span className="text-2xl">{PRIORITY_ICONS[priority]}</span>
-              <h3 className="text-xl font-bold text-gray-800">
+              <h3 className="text-xl font-bold text-gray-800 tracking-tight">
                 {priority} PRIORITY ({priorityTickets.length})
               </h3>
             </div>
@@ -61,7 +61,7 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
                 <button
                   key={ticket.id}
                   onClick={() => onTicketClick(ticket)}
-                  className={`w-full text-left p-4 rounded-lg border-l-4 shadow-sm hover:shadow-md transition-all ${PRIORITY_COLORS[priority]}`}
+                  className={`w-full text-left p-4 rounded-xl border-l-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${PRIORITY_COLORS[priority]}`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-lg text-gray-800">
