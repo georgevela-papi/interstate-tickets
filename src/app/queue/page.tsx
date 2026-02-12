@@ -76,8 +76,8 @@ export default function QueuePage() {
   const canComplete = session.role !== 'SERVICE_WRITER';
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="text-white shadow-lg" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
+    <div className="min-h-screen bg-slate-50">
+      <header className="text-white shadow-lg ring-1 ring-white/10" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -92,7 +92,7 @@ export default function QueuePage() {
                 </div>
               )}
               <div>
-                <h1 className="text-2xl font-bold">Job Queue ({tickets.length})</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Job Queue ({tickets.length})</h1>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
                   {session.name} {'\u2022'} Updated {lastUpdate.toLocaleTimeString()}
                 </p>
