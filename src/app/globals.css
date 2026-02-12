@@ -61,4 +61,12 @@ body {
   .border-brand {
     border-color: var(--brand-primary);
   }
+
+  .card {
+    @apply bg-white rounded-xl border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-200 p-6;
+  }
+
+  .nav-header {
+    @apply backdrop-blur-md ring-1 ring-white/10;
+  }
 }
