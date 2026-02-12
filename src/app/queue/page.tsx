@@ -18,7 +18,8 @@ export default function QueuePage() {
 
   useEffect(() => {
     const currentSession = getSession();
-    if (!currentSession || !['TECHNICIAN', 'MANAGER'].includes(currentSession.role)) {
+    // Allow SERVICE_WRITER, TECHNICIAN, and MANAGER to view queue
+    if (!currentSession || !['SERVICE_WRITER', 'TECHNICIAN', 'MANAGER'].includes(currentSession.role)) {
       router.push('/');
       return;
     }
@@ -53,6 +54,7 @@ export default function QueuePage() {
       console.error('Error loading queue:', error);
       return;
     }
+
     setTickets(data || []);
     setLastUpdate(new Date());
   };
@@ -60,11 +62,16 @@ export default function QueuePage() {
   const handleLogout = async () => {
     clearSession();
     await supabase.auth.signOut();
-    Object.keys(localStorage).forEach((key) => { if (key.startsWith('sb-')) localStorage.removeItem(key); });
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
     router.push('/');
   };
 
   if (!session) return null;
+
+  // SERVICE_WRITER can view queue but not complete jobs
+  const canComplete = session.role !== 'SERVICE_WRITER';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -85,10 +92,11 @@ export default function QueuePage() {
               <div>
                 <h1 className="text-2xl font-bold">Job Queue ({tickets.length})</h1>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  {session.name} • Updated {lastUpdate.toLocaleTimeString()}
+                  {session.name} â¢ Updated {lastUpdate.toLocaleTimeString()}
                 </p>
               </div>
             </div>
+
             <div className="flex items-center space-x-2">
               {session?.role === 'MANAGER' && (
                 <>
@@ -105,6 +113,14 @@ export default function QueuePage() {
                     Intake
                   </button>
                 </>
+              )}
+              {session?.role === 'SERVICE_WRITER' && (
+                <button
+                  onClick={() => router.push('/intake')}
+                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                >
+                  Intake
+                </button>
               )}
               <button
                 onClick={loadTickets}
@@ -139,6 +155,7 @@ export default function QueuePage() {
             setSelectedTicket(null);
             loadTickets();
           }}
+          canComplete={canComplete}
         />
       )}
     </div>
