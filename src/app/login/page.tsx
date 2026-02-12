@@ -6,7 +6,13 @@ import { supabase, saveSession } from '@/lib/supabase';
 import { useTenant } from '@/lib/tenant-context';
 
 type LoginMode = 'pin' | 'email';
-type EmailState = | 'idle' | 'sending' | 'sent' | 'error' | 'verifying' | 'access_denied';
+type EmailState =
+  | 'idle'
+  | 'sending'
+  | 'sent'
+  | 'error'
+  | 'verifying'
+  | 'access_denied';
 
 interface StaffInfo {
   id: string;
@@ -52,8 +58,9 @@ export default function LoginPage() {
       saveSession(staff.id, staff.name, staff.role);
       const route =
         staff.role === 'SERVICE_WRITER' ? '/intake' :
-        staff.role === 'TECHNICIAN'     ? '/queue' :
-        staff.role === 'MANAGER'        ? '/admin' : '/login';
+        staff.role === 'TECHNICIAN' ? '/queue' :
+        staff.role === 'MANAGER' ? '/admin' :
+        '/login';
       router.push(route);
     }
   }, [isAuthenticated, staff]);
@@ -62,9 +69,9 @@ export default function LoginPage() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken  = hashParams.get('access_token');
+      const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
-      const hashError    = hashParams.get('error');
+      const hashError = hashParams.get('error');
       const errorDescription = hashParams.get('error_description');
 
       if (hashError) {
@@ -107,16 +114,18 @@ export default function LoginPage() {
           return;
         }
 
-        // Device is now activated â save session and redirect
+        // Device is now activated -- save session and redirect
         setDeviceActivated(true);
         saveSession(staffData.id, staffData.name, staffData.role);
         const route =
           staffData.role === 'SERVICE_WRITER' ? '/intake' :
-          staffData.role === 'TECHNICIAN'     ? '/queue' :
-          staffData.role === 'MANAGER'        ? '/admin' : '/login';
+          staffData.role === 'TECHNICIAN' ? '/queue' :
+          staffData.role === 'MANAGER' ? '/admin' :
+          '/login';
         router.push(route);
       }
     };
+
     handleAuthCallback();
   }, [tenant]);
 
@@ -156,16 +165,16 @@ export default function LoginPage() {
       }
 
       saveSession(data.id_code, data.name, data.role);
-
       setPinSuccess(data.name);
+
       setTimeout(() => {
         const route =
           data.role === 'SERVICE_WRITER' ? '/intake' :
-          data.role === 'TECHNICIAN'     ? '/queue' :
-          data.role === 'MANAGER'        ? '/admin' : '/login';
+          data.role === 'TECHNICIAN' ? '/queue' :
+          data.role === 'MANAGER' ? '/admin' :
+          '/login';
         router.push(route);
       }, 400);
-
     } catch (err) {
       setError('Login failed. Try again.');
       setPinCode('');
@@ -199,7 +208,6 @@ export default function LoginPage() {
 
     try {
       const redirectUrl = `${window.location.origin}/login`;
-
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase().trim(),
         options: {
@@ -242,7 +250,11 @@ export default function LoginPage() {
       {/* Logo & Business Name */}
       <div className="text-center mb-6">
         {tenant?.logo_url ? (
-          <img src={tenant.logo_url} alt={tenant.name} className="mx-auto mb-3 h-16 object-contain" />
+          <img
+            src={tenant.logo_url}
+            alt={tenant.name}
+            className="mx-auto mb-3 h-16 object-contain"
+          />
         ) : (
           <div
             className="mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
@@ -301,7 +313,7 @@ export default function LoginPage() {
                     color: '#16A34A',
                   }}
                 >
-                  <span className="text-xl">â {pinSuccess}</span>
+                  <span className="text-xl">{'\u2713'} {pinSuccess}</span>
                 </div>
               </div>
             )}
@@ -344,7 +356,7 @@ export default function LoginPage() {
                 disabled={pinLoading || !!pinSuccess}
                 className="py-4 text-xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-all text-gray-500 disabled:opacity-50"
               >
-                â«
+                {'\u232B'}
               </button>
             </div>
 
@@ -369,10 +381,13 @@ export default function LoginPage() {
           {/* Switch to email login */}
           <div className="text-center mt-5">
             <button
-              onClick={() => { setMode('email'); setError(null); }}
+              onClick={() => {
+                setMode('email');
+                setError(null);
+              }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
-              Manager / First-time setup â
+              Manager / First-time setup {'\u2192'}
             </button>
           </div>
         </div>
@@ -384,11 +399,15 @@ export default function LoginPage() {
           <div className="bg-white rounded-2xl shadow-lg p-8">
             {emailState === 'access_denied' ? (
               <div className="text-center">
-                <div className="text-red-500 text-5xl mb-4">ð«</div>
+                <div className="text-red-500 text-5xl mb-4">{'\uD83D\uDEAB'}</div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h2>
                 <p className="text-gray-600 mb-6">{error}</p>
                 <button
-                  onClick={() => { setEmailState('idle'); setError(null); setEmail(''); }}
+                  onClick={() => {
+                    setEmailState('idle');
+                    setError(null);
+                    setEmail('');
+                  }}
                   className="w-full text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                   style={{ backgroundColor: primaryColor }}
                 >
@@ -397,7 +416,7 @@ export default function LoginPage() {
               </div>
             ) : emailState === 'sent' ? (
               <div className="text-center">
-                <div className="text-green-500 text-5xl mb-4">âï¸</div>
+                <div className="text-green-500 text-5xl mb-4">{'\u2709\uFE0F'}</div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">Check Your Email</h2>
                 <p className="text-gray-600 mb-1">We sent a login link to:</p>
                 <p className="font-semibold text-gray-800 mb-5">{email}</p>
@@ -416,7 +435,10 @@ export default function LoginPage() {
                   {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Link'}
                 </button>
                 <button
-                  onClick={() => { setEmailState('idle'); setEmail(''); }}
+                  onClick={() => {
+                    setEmailState('idle');
+                    setEmail('');
+                  }}
                   className="mt-3 text-sm text-sky-500 hover:underline"
                 >
                   Use a different email
@@ -446,13 +468,11 @@ export default function LoginPage() {
                   autoFocus
                   autoComplete="email"
                 />
-
                 {error && emailState === 'error' && (
                   <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
                     {error}
                   </div>
                 )}
-
                 <button
                   type="submit"
                   disabled={emailState === 'sending' || !email.trim()}
@@ -482,10 +502,14 @@ export default function LoginPage() {
           {/* Back to PIN pad */}
           <div className="text-center mt-5">
             <button
-              onClick={() => { setMode('pin'); setError(null); setEmailState('idle'); }}
+              onClick={() => {
+                setMode('pin');
+                setError(null);
+                setEmailState('idle');
+              }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
-              â Back to ID code login
+              {'\u2190'} Back to ID code login
             </button>
           </div>
         </div>
