@@ -237,7 +237,7 @@ export default function LoginPage() {
   // --- LOADING STATE ---
   if (tenantLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-sky-50/30">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500" />
       </div>
     );
@@ -246,7 +246,7 @@ export default function LoginPage() {
   const primaryColor = tenant?.primary_color || '#0EA5E9';
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-8">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-sky-50/30 px-4 py-8">
       {/* Logo & Business Name */}
       <div className="text-center mb-6">
         {tenant?.logo_url ? (
@@ -257,13 +257,13 @@ export default function LoginPage() {
           />
         ) : (
           <div
-            className="mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
+            className="mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-lg"
             style={{ backgroundColor: primaryColor }}
           >
             {tenant?.name?.charAt(0) || 'T'}
           </div>
         )}
-        <h1 className="text-xl font-bold text-gray-800">
+        <h1 className="text-xl font-bold text-gray-800 tracking-tight">
           {tenant?.name || 'Job Tickets'}
         </h1>
       </div>
@@ -271,7 +271,7 @@ export default function LoginPage() {
       {/* ============== PIN PAD MODE ============== */}
       {mode === 'pin' && (
         <div className="w-full max-w-sm">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/60 p-6">
             <p className="text-center text-gray-500 text-sm mb-6">
               Enter your ID code to clock in
             </p>
@@ -332,7 +332,7 @@ export default function LoginPage() {
                   key={digit}
                   onClick={() => handlePinPress(digit)}
                   disabled={pinLoading || !!pinSuccess}
-                  className="py-4 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 active:scale-95 transition-all text-gray-800 disabled:opacity-50"
+                  className="py-4 text-2xl font-semibold rounded-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all text-gray-800 shadow-sm disabled:opacity-50"
                 >
                   {digit}
                 </button>
@@ -347,7 +347,7 @@ export default function LoginPage() {
               <button
                 onClick={() => handlePinPress('0')}
                 disabled={pinLoading || !!pinSuccess}
-                className="py-4 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 active:scale-95 transition-all text-gray-800 disabled:opacity-50"
+                className="py-4 text-2xl font-semibold rounded-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all text-gray-800 shadow-sm disabled:opacity-50"
               >
                 0
               </button>
@@ -364,7 +364,7 @@ export default function LoginPage() {
             <button
               onClick={() => handlePinLogin(pinCode)}
               disabled={!pinCode.trim() || pinLoading || !!pinSuccess}
-              className="w-full py-4 rounded-xl text-white text-lg font-bold transition-all disabled:opacity-40"
+              className="w-full py-4 rounded-xl text-white text-lg font-bold transition-all shadow-sm hover:shadow-md active:scale-[0.98] disabled:opacity-40"
               style={{ backgroundColor: primaryColor }}
             >
               {pinLoading ? (
