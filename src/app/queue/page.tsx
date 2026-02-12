@@ -18,11 +18,13 @@ export default function QueuePage() {
 
   useEffect(() => {
     const currentSession = getSession();
+
     // Allow SERVICE_WRITER, TECHNICIAN, and MANAGER to view queue
     if (!currentSession || !['SERVICE_WRITER', 'TECHNICIAN', 'MANAGER'].includes(currentSession.role)) {
       router.push('/');
       return;
     }
+
     setSession(currentSession);
     loadTickets();
 
@@ -92,11 +94,10 @@ export default function QueuePage() {
               <div>
                 <h1 className="text-2xl font-bold">Job Queue ({tickets.length})</h1>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  {session.name} â¢ Updated {lastUpdate.toLocaleTimeString()}
+                  {session.name} {'\u2022'} Updated {lastUpdate.toLocaleTimeString()}
                 </p>
               </div>
             </div>
-
             <div className="flex items-center space-x-2">
               {session?.role === 'MANAGER' && (
                 <>
