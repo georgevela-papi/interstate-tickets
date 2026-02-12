@@ -64,6 +64,7 @@ function IntakeContent() {
         setLoadingServices(false);
       }
     }
+
     loadServices();
   }, []);
 
@@ -294,7 +295,7 @@ function IntakeContent() {
                     onClick={() => setSelectedService(null)}
                     className="text-gray-600 hover:text-gray-800 font-semibold"
                   >
-                    â Change Service
+                    {'\u2190'} Change Service
                   </button>
                 </div>
                 <DynamicServiceForm
@@ -310,7 +311,7 @@ function IntakeContent() {
         </div>
       </main>
 
-      {/* Success Toast â large centered banner */}
+      {/* Success Toast -- large centered banner */}
       {showToast && (
         <div className="fixed inset-x-0 top-0 z-50 flex justify-center pt-4 px-4">
           <div
