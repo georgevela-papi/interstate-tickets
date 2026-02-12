@@ -46,8 +46,8 @@ export default function ServicePicker({ selectedService, onSelect, services }: S
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-800 mb-4">Select Service Type</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <h2 className="text-xl font-bold text-gray-800 mb-4 tracking-tight">Select Service Type</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {activeServices.map((service) => (
           <button
             key={service.slug}
@@ -58,7 +58,7 @@ export default function ServicePicker({ selectedService, onSelect, services }: S
               ${
                 selectedService === service.slug
                   ? 'bg-sky-500 border-sky-600 text-white shadow-lg scale-105'
-                  : 'bg-white border-gray-300 text-gray-700 hover:border-sky-400 hover:shadow-md active:scale-95'
+                  : 'bg-white border-slate-200/60 text-gray-700 shadow-sm hover:border-sky-400 hover:shadow-md active:scale-95'
               }
             `}
           >
