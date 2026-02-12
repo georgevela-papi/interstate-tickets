@@ -20,9 +20,9 @@ const PRIORITY_COLORS: Record<PriorityLevel, string> = {
 };
 
 const PRIORITY_ICONS: Record<PriorityLevel, string> = {
-  HIGH: 'ð´',
-  NORMAL: 'âª',
-  LOW: 'ðµ',
+  HIGH: '\uD83D\uDD34',
+  NORMAL: '\u26AA',
+  LOW: '\uD83D\uDD35',
 };
 
 export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
@@ -35,7 +35,7 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
   if (tickets.length === 0) {
     return (
       <div className="text-center py-16">
-        <div className="text-6xl mb-4">â</div>
+        <div className="text-6xl mb-4">{'\u2705'}</div>
         <h2 className="text-2xl font-bold text-gray-800 mb-2">All Caught Up!</h2>
         <p className="text-gray-600">No pending jobs at the moment.</p>
       </div>
@@ -56,7 +56,6 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
                 {priority} PRIORITY ({priorityTickets.length})
               </h3>
             </div>
-
             <div className="space-y-3">
               {priorityTickets.map((ticket) => (
                 <button
@@ -72,25 +71,24 @@ export default function QueueList({ tickets, onTicketClick }: QueueListProps) {
                       {getTimeElapsed(ticket.created_at)} ago
                     </span>
                   </div>
-
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-gray-700">{ticket.vehicle}</p>
                       {ticket.customer_name && (
                         <p className="text-sm text-gray-600">
-                          ð¤ {ticket.customer_name}
-                          {ticket.customer_phone ? ` â¢ ${ticket.customer_phone}` : ''}
+                          {'\uD83D\uDC64'} {ticket.customer_name}
+                          {ticket.customer_phone ? ` \u2022 ${ticket.customer_phone}` : ''}
                         </p>
                       )}
                       <p className="text-sm text-gray-500">
                         {getServiceLabel(ticket.service_type)}
                         {(() => {
                           const detail = getServiceDataText(ticket.service_type, ticket.service_data);
-                          return detail ? ` â¢ ${detail}` : '';
+                          return detail ? ` \u2022 ${detail}` : '';
                         })()}
                       </p>
                     </div>
-                    <span className="text-sky-500 font-semibold text-sm">View â</span>
+                    <span className="text-sky-500 font-semibold text-sm">View {'\u2192'}</span>
                   </div>
                 </button>
               ))}
