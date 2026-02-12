@@ -43,9 +43,9 @@ export default function AdminPage() {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header — Desktop */}
-      <header className="text-white shadow-lg" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
+      <header className="text-white shadow-lg ring-1 ring-white/10" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
         <div className="container mx-auto px-4 py-4">
           {/* Desktop header */}
           <div className="hidden md:flex items-center justify-between">
@@ -54,7 +54,7 @@ export default function AdminPage() {
                 {tenant?.logo_url ? <Image src={tenant.logo_url} alt={tenant?.name || 'Logo'} fill className="object-contain" /> : null}
               </div>
               <div>
-                <h1 className="text-2xl font-bold">{tenant?.name || 'Admin Dashboard'}</h1>
+                <h1 className="text-2xl font-bold tracking-tight">{tenant?.name || 'Admin Dashboard'}</h1>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Logged in as {session.name}</p>
               </div>
             </div>
@@ -101,7 +101,7 @@ export default function AdminPage() {
       </header>
 
       {/* Tabs */}
-      <div className="bg-white border-b">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 shadow-sm">
         <div className="container mx-auto px-4">
           <div className="flex space-x-6 overflow-x-auto">
             <button
