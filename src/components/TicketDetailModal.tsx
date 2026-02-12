@@ -14,12 +14,14 @@ interface TicketDetailModalProps {
   ticket: ActiveQueueItem;
   onClose: () => void;
   onComplete: () => void;
+  canComplete?: boolean;
 }
 
 export default function TicketDetailModal({
   ticket,
   onClose,
   onComplete,
+  canComplete = true,
 }: TicketDetailModalProps) {
   const [loading, setLoading] = useState(false);
 
@@ -79,6 +81,9 @@ export default function TicketDetailModal({
     }
   };
 
+  // Get the service details text
+  const serviceDetailText = getServiceDataText(ticket.service_type, ticket.service_data);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
@@ -88,7 +93,7 @@ export default function TicketDetailModal({
             Ticket #{ticket.ticket_number}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-            ✕
+            â
           </button>
         </div>
 
@@ -123,17 +128,30 @@ export default function TicketDetailModal({
                 <span className="text-sm text-gray-500">Customer</span>
                 <p className="font-semibold">
                   {ticket.customer_name}
-                  {ticket.customer_phone ? ` • ${ticket.customer_phone}` : ''}
+                  {ticket.customer_phone ? ` â¢ ${ticket.customer_phone}` : ''}
                 </p>
               </div>
             )}
 
-            <div>
-              <span className="text-sm text-gray-500">Service Details</span>
-              <p className="font-semibold">
-                {getServiceDataText(ticket.service_type, ticket.service_data)}
-              </p>
-            </div>
+            {/* Service Details - show text summary, plus raw key-value pairs for dynamic services */}
+            {serviceDetailText ? (
+              <div>
+                <span className="text-sm text-gray-500">Service Details</span>
+                <p className="font-semibold">{serviceDetailText}</p>
+              </div>
+            ) : ticket.service_data && typeof ticket.service_data === 'object' && Object.keys(ticket.service_data).length > 0 ? (
+              <div>
+                <span className="text-sm text-gray-500">Service Details</span>
+                <div className="mt-1 space-y-1">
+                  {Object.entries(ticket.service_data).map(([key, value]) => (
+                    <p key={key} className="font-semibold">
+                      <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}:</span>{' '}
+                      {String(value)}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {ticket.notes && (
               <div>
@@ -155,23 +173,25 @@ export default function TicketDetailModal({
             </div>
           </div>
 
-          {/* FIX 2A: No technician dropdown — auto-assigned */}
-          <div className="pt-4 space-y-3">
-            <button
-              onClick={handleComplete}
-              disabled={loading}
-              className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <span className="spinner mr-3"></span>
-                  Completing...
-                </span>
-              ) : (
-                '✓ Complete Job'
-              )}
-            </button>
-          </div>
+          {/* FIX 2A: No technician dropdown â auto-assigned */}
+          {canComplete && (
+            <div className="pt-4 space-y-3">
+              <button
+                onClick={handleComplete}
+                disabled={loading}
+                className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center">
+                    <span className="spinner mr-3"></span>
+                    Completing...
+                  </span>
+                ) : (
+                  'â Complete Job'
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
