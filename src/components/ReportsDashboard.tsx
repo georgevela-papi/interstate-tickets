@@ -14,6 +14,18 @@ const SERVICE_LABELS: Record<string, string> = {
   MAINTENANCE: 'Maintenance',
 };
 
+// Fallback icons for legacy service slugs (matches ServicePicker)
+const LEGACY_ICONS: Record<string, string> = {
+  MOUNT_BALANCE: '\u2699\uFE0F',
+  FLAT_REPAIR: '\uD83D\uDD27',
+  ROTATION: '\uD83D\uDD04',
+  NEW_TIRES: '\uD83C\uDD95',
+  USED_TIRES: '\u267B\uFE0F',
+  DETAILING: '\u2728',
+  MAINTENANCE: '\uD83D\uDEE0\uFE0F',
+  APPOINTMENT: '\uD83D\uDCC5',
+};
+
 type RangeMode = 'today' | 'week' | 'custom';
 
 function getStartOfToday() {
@@ -45,6 +57,10 @@ export default function ReportsDashboard() {
   const [rangeMode, setRangeMode] = useState<RangeMode>('today');
   const [customStart, setCustomStart] = useState(toLocalDateStr(getStartOfToday()));
   const [customEnd, setCustomEnd] = useState(toLocalDateStr(new Date()));
+
+  // Service icon map from database
+  const [serviceIcons, setServiceIcons] = useState<Record<string, string>>({});
+
   const [stats, setStats] = useState({
     total: 0,
     completed: 0,
@@ -56,9 +72,37 @@ export default function ReportsDashboard() {
   });
   const [loading, setLoading] = useState(true);
 
+  // Load service icons from DB
+  useEffect(() => {
+    async function loadIcons() {
+      const { data } = await supabase
+        .from('service_types')
+        .select('slug, icon, name');
+      if (data) {
+        const iconMap: Record<string, string> = {};
+        const nameMap: Record<string, string> = {};
+        data.forEach((s: any) => {
+          if (s.icon) iconMap[s.slug] = s.icon;
+          if (s.name) nameMap[s.slug] = s.name;
+        });
+        setServiceIcons(iconMap);
+        // Also update SERVICE_LABELS with DB names for dynamic services
+        data.forEach((s: any) => {
+          if (s.name && !SERVICE_LABELS[s.slug]) {
+            SERVICE_LABELS[s.slug] = s.name;
+          }
+        });
+      }
+    }
+    loadIcons();
+  }, []);
+
+  function getIcon(slug: string): string {
+    return serviceIcons[slug] || LEGACY_ICONS[slug] || '\uD83D\uDCCB';
+  }
+
   const loadStats = useCallback(async () => {
     setLoading(true);
-
     let startDate: Date;
     let endDate: Date;
 
@@ -90,23 +134,29 @@ export default function ReportsDashboard() {
     const validCompleted = all.filter(
       (t) => t.status === 'COMPLETED' && t.completed_at && !t.excluded_from_metrics
     );
+
     let totalMinutes = 0;
     validCompleted.forEach((t) => {
-      const mins = (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
+      const mins =
+        (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
       totalMinutes += mins;
     });
-    const avgTimeMins = validCompleted.length > 0 ? Math.round(totalMinutes / validCompleted.length) : 0;
+
+    const avgTimeMins =
+      validCompleted.length > 0 ? Math.round(totalMinutes / validCompleted.length) : 0;
     const totalHours = Math.round((totalMinutes / 60) * 10) / 10;
 
     const serviceMap: Record<string, { count: number; mins: number }> = {};
     all.forEach((t) => {
-      if (!serviceMap[t.service_type]) serviceMap[t.service_type] = { count: 0, mins: 0 };
+      if (!serviceMap[t.service_type])
+        serviceMap[t.service_type] = { count: 0, mins: 0 };
       serviceMap[t.service_type].count++;
       if (t.status === 'COMPLETED' && t.completed_at && !t.excluded_from_metrics) {
         serviceMap[t.service_type].mins +=
           (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
       }
     });
+
     const byService = Object.entries(serviceMap)
       .map(([service_type, v]) => ({
         service_type,
@@ -115,7 +165,9 @@ export default function ReportsDashboard() {
       }))
       .sort((a, b) => b.count - a.count);
 
-    const completedWithTech = all.filter((t) => t.completed_by && t.status === 'COMPLETED');
+    const completedWithTech = all.filter(
+      (t) => t.completed_by && t.status === 'COMPLETED'
+    );
     const techIds = Array.from(new Set(completedWithTech.map((t) => t.completed_by)));
 
     let byTech: { name: string; count: number; hours: number }[] = [];
@@ -136,8 +188,13 @@ export default function ReportsDashboard() {
             (new Date(t.completed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
         }
       });
+
       byTech = Object.values(techMap)
-        .map((v) => ({ name: v.name, count: v.count, hours: Math.round((v.mins / 60) * 10) / 10 }))
+        .map((v) => ({
+          name: v.name,
+          count: v.count,
+          hours: Math.round((v.mins / 60) * 10) / 10,
+        }))
         .sort((a, b) => b.count - a.count);
     }
 
@@ -149,7 +206,8 @@ export default function ReportsDashboard() {
     loadStats();
   }, [loadStats]);
 
-  const rangeLabel = rangeMode === 'today' ? 'Today' : rangeMode === 'week' ? 'This Week' : 'Custom Range';
+  const rangeLabel =
+    rangeMode === 'today' ? 'Today' : rangeMode === 'week' ? 'This Week' : 'Custom Range';
 
   return (
     <div className="space-y-6">
@@ -170,7 +228,6 @@ export default function ReportsDashboard() {
             </button>
           ))}
         </div>
-
         {rangeMode === 'custom' && (
           <div className="flex flex-wrap items-center gap-3 mt-4">
             <div>
@@ -196,7 +253,9 @@ export default function ReportsDashboard() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><div className="spinner" /></div>
+        <div className="flex justify-center py-12">
+          <div className="spinner" />
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -213,7 +272,9 @@ export default function ReportsDashboard() {
               <p className="text-sm text-gray-500">Pending</p>
             </div>
             <div className="card text-center">
-              <p className="text-3xl font-bold text-sky-600">{formatMins(stats.avgTimeMins)}</p>
+              <p className="text-3xl font-bold text-sky-600">
+                {formatMins(stats.avgTimeMins)}
+              </p>
               <p className="text-sm text-gray-500">Avg Completion</p>
             </div>
             <div className="card text-center col-span-2 md:col-span-1">
@@ -223,16 +284,24 @@ export default function ReportsDashboard() {
           </div>
 
           <div className="card">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">{rangeLabel} by Service Type</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              {rangeLabel} by Service Type
+            </h3>
             {stats.byService.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No tickets in this period</p>
             ) : (
               <div className="space-y-2">
                 {stats.byService.map((s) => (
-                  <div key={s.service_type} className="flex items-center justify-between py-2">
-                    <span className="text-gray-700">
-                      {SERVICE_LABELS[s.service_type] || s.service_type}
-                    </span>
+                  <div
+                    key={s.service_type}
+                    className="flex items-center justify-between py-2"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-2xl">{getIcon(s.service_type)}</span>
+                      <span className="text-gray-700">
+                        {SERVICE_LABELS[s.service_type] || s.service_type.replace(/_/g, ' ')}
+                      </span>
+                    </div>
                     <div className="flex items-center space-x-3">
                       <span className="text-xs text-gray-400">{s.hours}h logged</span>
                       <span className="font-bold text-gray-800 bg-gray-100 px-3 py-1 rounded-full text-sm">
@@ -246,15 +315,26 @@ export default function ReportsDashboard() {
           </div>
 
           <div className="card">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Technician Performance ({rangeLabel})</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              Technician Performance ({rangeLabel})
+            </h3>
             {stats.byTech.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No completed tickets in this period</p>
+              <p className="text-gray-400 text-center py-4">
+                No completed tickets in this period
+              </p>
             ) : (
               <div className="space-y-2">
                 {stats.byTech.map((t, i) => (
-                  <div key={t.name} className="flex items-center justify-between py-2">
+                  <div
+                    key={t.name}
+                    className="flex items-center justify-between py-2"
+                  >
                     <div className="flex items-center space-x-3">
-                      <span className={`text-lg font-bold ${i === 0 ? 'text-yellow-500' : 'text-gray-400'}`}>
+                      <span
+                        className={`text-lg font-bold ${
+                          i === 0 ? 'text-yellow-500' : 'text-gray-400'
+                        }`}
+                      >
                         #{i + 1}
                       </span>
                       <span className="text-gray-700 font-medium">{t.name}</span>
