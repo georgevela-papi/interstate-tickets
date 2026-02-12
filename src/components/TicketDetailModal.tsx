@@ -24,9 +24,11 @@ export default function TicketDetailModal({
   canComplete = true,
 }: TicketDetailModalProps) {
   const [loading, setLoading] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // FIX 2A: Auto-determine technician from logged-in session
   const handleComplete = async () => {
+    setShowConfirm(false);
     setLoading(true);
     try {
       const session = getSession();
@@ -173,23 +175,49 @@ export default function TicketDetailModal({
             </div>
           </div>
 
-          {/* FIX 2A: No technician dropdown â auto-assigned */}
+          {/* Complete button â requires confirmation */}
           {canComplete && (
             <div className="pt-4 space-y-3">
-              <button
-                onClick={handleComplete}
-                disabled={loading}
-                className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <span className="spinner mr-3"></span>
-                    Completing...
-                  </span>
-                ) : (
-                  'â Complete Job'
-                )}
-              </button>
+              {!showConfirm ? (
+                <button
+                  onClick={() => setShowConfirm(true)}
+                  disabled={loading}
+                  className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-xl font-bold transition-colors"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <span className="spinner mr-3"></span>
+                      Completing...
+                    </span>
+                  ) : (
+                    'â Complete Job'
+                  )}
+                </button>
+              ) : (
+                <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4">
+                  <p className="text-center text-amber-900 font-bold text-lg mb-3">
+                    Mark this job as complete?
+                  </p>
+                  <p className="text-center text-amber-700 text-sm mb-4">
+                    This action cannot be undone.
+                  </p>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowConfirm(false)}
+                      className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-lg font-semibold transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleComplete}
+                      disabled={loading}
+                      className="flex-1 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg text-lg font-bold transition-colors"
+                    >
+                      {loading ? 'Completing...' : 'Yes, Complete'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
