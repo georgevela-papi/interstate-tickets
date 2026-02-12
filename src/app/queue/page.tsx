@@ -18,13 +18,11 @@ export default function QueuePage() {
 
   useEffect(() => {
     const currentSession = getSession();
-
     // Allow SERVICE_WRITER, TECHNICIAN, and MANAGER to view queue
     if (!currentSession || !['SERVICE_WRITER', 'TECHNICIAN', 'MANAGER'].includes(currentSession.role)) {
       router.push('/');
       return;
     }
-
     setSession(currentSession);
     loadTickets();
 
@@ -76,13 +74,14 @@ export default function QueuePage() {
   const canComplete = session.role !== 'SERVICE_WRITER';
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="text-white shadow-lg ring-1 ring-white/10" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+    <div className="min-h-screen bg-gray-50">
+      <header className="text-white shadow-lg" style={{ backgroundColor: tenant?.primary_color || '#6B7280' }}>
+        <div className="container mx-auto px-4 py-3 sm:py-4">
+          {/* Mobile-responsive header: stacks on small screens */}
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center space-x-3 min-w-0">
               {tenant?.logo_url && (
-                <div className="relative w-16 h-12">
+                <div className="relative w-10 h-8 sm:w-16 sm:h-12 flex-shrink-0">
                   <Image
                     src={tenant.logo_url}
                     alt={tenant?.name || 'Logo'}
@@ -91,25 +90,26 @@ export default function QueuePage() {
                   />
                 </div>
               )}
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Job Queue ({tickets.length})</h1>
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  {session.name} {'\u2022'} Updated {lastUpdate.toLocaleTimeString()}
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl font-bold truncate">Job Queue ({tickets.length})</h1>
+                <p className="text-xs sm:text-sm truncate" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  {session.name} • {lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               {session?.role === 'MANAGER' && (
                 <>
                   <button
                     onClick={() => router.push('/admin')}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors"
                   >
                     Admin
                   </button>
                   <button
                     onClick={() => router.push('/intake')}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors"
                   >
                     Intake
                   </button>
@@ -118,23 +118,23 @@ export default function QueuePage() {
               {session?.role === 'SERVICE_WRITER' && (
                 <button
                   onClick={() => router.push('/intake')}
-                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors"
                 >
                   Intake
                 </button>
               )}
               <button
                 onClick={loadTickets}
-                className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center space-x-2"
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors flex items-center space-x-1 sm:space-x-2"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span>Refresh</span>
+                <span className="hidden sm:inline">Refresh</span>
               </button>
               <button
                 onClick={handleLogout}
-                className="bg-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                className="bg-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors"
                 style={{ color: tenant?.primary_color || '#6B7280' }}
               >
                 Logout
