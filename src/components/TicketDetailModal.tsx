@@ -72,7 +72,6 @@ export default function TicketDetailModal({
         .eq('id', ticket.id);
 
       if (error) throw error;
-
       onComplete();
       onClose();
     } catch (error) {
@@ -95,7 +94,7 @@ export default function TicketDetailModal({
             Ticket #{ticket.ticket_number}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-            â
+            {'\u2715'}
           </button>
         </div>
 
@@ -110,8 +109,8 @@ export default function TicketDetailModal({
                 ticket.priority === 'HIGH'
                   ? 'bg-red-100 text-red-900'
                   : ticket.priority === 'NORMAL'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'bg-blue-100 text-blue-900'
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'bg-blue-100 text-blue-900'
               }`}
             >
               {PRIORITY_LABELS[ticket.priority]}
@@ -130,7 +129,7 @@ export default function TicketDetailModal({
                 <span className="text-sm text-gray-500">Customer</span>
                 <p className="font-semibold">
                   {ticket.customer_name}
-                  {ticket.customer_phone ? ` â¢ ${ticket.customer_phone}` : ''}
+                  {ticket.customer_phone ? ` \u2022 ${ticket.customer_phone}` : ''}
                 </p>
               </div>
             )}
@@ -175,7 +174,7 @@ export default function TicketDetailModal({
             </div>
           </div>
 
-          {/* Complete button â requires confirmation */}
+          {/* Complete button -- requires confirmation */}
           {canComplete && (
             <div className="pt-4 space-y-3">
               {!showConfirm ? (
@@ -190,7 +189,7 @@ export default function TicketDetailModal({
                       Completing...
                     </span>
                   ) : (
-                    'â Complete Job'
+                    '\u2713 Complete Job'
                   )}
                 </button>
               ) : (
