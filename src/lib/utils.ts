@@ -4,10 +4,8 @@
 import type { ServiceFieldConfig } from './types';
 import { validateTireSize, validatePhone } from './types';
 
-// Hardcoded field definitions for legacy service types.
-// New services added via Command Center use service_fields table instead.
-// customer_name and customer_phone are collected globally
-// on ALL service types (handled in DynamicServiceForm).
+// [KEEP ALL SERVICE_FIELDS exactly as-is]
+
 export const SERVICE_FIELDS: Record<string, ServiceFieldConfig[]> = {
   MOUNT_BALANCE: [
     {
@@ -190,41 +188,12 @@ export function getTimeElapsed(createdAt: string): string {
   const now = new Date();
   const diffMs = now.getTime() - created.getTime();
   const diffMins = Math.floor(diffMs / 60000);
+
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m`;
   const hours = Math.floor(diffMins / 60);
   const mins = diffMins % 60;
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
-
-export function getServiceDataText(serviceType: string, data: any): string {
-  if (!data) return '';
-
-  switch (serviceType) {
-    case 'MOUNT_BALANCE':
-      return `${data.tire_count || '?'} tire(s)`;
-    case 'FLAT_REPAIR': {
-      const pos: Record<string, string> = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
-      return pos[data.tire_position] || data.tire_position || '';
-    }
-    case 'ROTATION':
-      return data.pattern ? `${data.pattern} pattern` : 'Standard rotation';
-    case 'NEW_TIRES':
-    case 'USED_TIRES':
-      return `${data.tire_size || '?'} × ${data.quantity || '?'}${data.brand ? ` (${data.brand})` : ''}`;
-    case 'DETAILING':
-      return `${data.service_level || ''} Detail`;
-    case 'MAINTENANCE':
-      return data.maintenance_type || data.description || 'General maintenance';
-    case 'APPOINTMENT':
-      return `${data.customer_name || ''} - ${data.phone || ''}`;
-    default: {
-      // Dynamic services: summarize the JSONB service_data keys
-      const entries = Object.entries(data).filter(([, v]) => v != null && v !== '');
-      if (entries.length === 0) return '';
-      return entries.map(([, v]) => String(v)).join(' · ');
-    }
-  }
 }
 
 // Check if appointment should be visible in queue
@@ -240,7 +209,6 @@ export function suggestIdCode(role: 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER')
     TECHNICIAN: 'T',
     MANAGER: 'M',
   }[role];
-
   const num = String(Math.floor(Math.random() * 90) + 10);
   return `${prefix}${num}`;
 }
@@ -248,4 +216,58 @@ export function suggestIdCode(role: 'SERVICE_WRITER' | 'TECHNICIAN' | 'MANAGER')
 // Normalize phone number to digits only for storage/matching
 export function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, '');
+}
+
+export function getServiceDataText(serviceType: string, data: any): string {
+  if (!data) return '';
+
+  // Dynamic fallback: summarize all non-empty values from service_data
+  const dynamicFallback = (): string => {
+    if (typeof data !== 'object') return String(data);
+    const entries = Object.entries(data).filter(([, v]) => v != null && v !== '');
+    if (entries.length === 0) return '';
+    return entries.map(([, v]) => String(v)).join(' Â· ');
+  };
+
+  switch (serviceType) {
+    case 'MOUNT_BALANCE': {
+      const result = data.tire_count ? `${data.tire_count} tire(s)` : '';
+      return result || dynamicFallback();
+    }
+
+    case 'FLAT_REPAIR': {
+      const pos: Record<string, string> = { FL: 'Front Left', FR: 'Front Right', RL: 'Rear Left', RR: 'Rear Right' };
+      const result = pos[data.tire_position] || data.tire_position || '';
+      return result || dynamicFallback();
+    }
+
+    case 'ROTATION': {
+      const result = data.pattern ? `${data.pattern} pattern` : '';
+      return result || dynamicFallback();
+    }
+
+    case 'NEW_TIRES':
+    case 'USED_TIRES': {
+      const result = `${data.tire_size || '?'} Ã ${data.quantity || '?'}${data.brand ? ` (${data.brand})` : ''}`;
+      return result && result !== '? Ã ?' ? result : dynamicFallback();
+    }
+
+    case 'DETAILING': {
+      const result = `${data.service_level || ''} Detail`.trim();
+      return result && result !== 'Detail' ? result : dynamicFallback();
+    }
+
+    case 'MAINTENANCE': {
+      const result = data.maintenance_type || data.description || '';
+      return result || dynamicFallback();
+    }
+
+    case 'APPOINTMENT': {
+      const result = `${data.customer_name || ''} - ${data.phone || ''}`.trim();
+      return result && result !== '-' ? result : dynamicFallback();
+    }
+
+    default:
+      return dynamicFallback();
+  }
 }
