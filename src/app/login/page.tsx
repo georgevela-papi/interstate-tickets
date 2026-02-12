@@ -6,14 +6,7 @@ import { supabase, saveSession } from '@/lib/supabase';
 import { useTenant } from '@/lib/tenant-context';
 
 type LoginMode = 'pin' | 'email';
-
-type EmailState =
-  | 'idle'
-  | 'sending'
-  | 'sent'
-  | 'error'
-  | 'verifying'
-  | 'access_denied';
+type EmailState = | 'idle' | 'sending' | 'sent' | 'error' | 'verifying' | 'access_denied';
 
 interface StaffInfo {
   id: string;
@@ -57,10 +50,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (isAuthenticated && staff) {
       saveSession(staff.id, staff.name, staff.role);
-      const route = staff.role === 'SERVICE_WRITER' ? '/intake'
-        : staff.role === 'TECHNICIAN' ? '/queue'
-        : staff.role === 'MANAGER' ? '/admin'
-        : '/login';
+      const route =
+        staff.role === 'SERVICE_WRITER' ? '/intake' :
+        staff.role === 'TECHNICIAN'     ? '/queue' :
+        staff.role === 'MANAGER'        ? '/admin' : '/login';
       router.push(route);
     }
   }, [isAuthenticated, staff]);
@@ -69,9 +62,9 @@ export default function LoginPage() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
+      const accessToken  = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
-      const hashError = hashParams.get('error');
+      const hashError    = hashParams.get('error');
       const errorDescription = hashParams.get('error_description');
 
       if (hashError) {
@@ -114,18 +107,16 @@ export default function LoginPage() {
           return;
         }
 
-        // Device is now activated — save session and redirect
+        // Device is now activated â save session and redirect
         setDeviceActivated(true);
         saveSession(staffData.id, staffData.name, staffData.role);
-
-        const route = staffData.role === 'SERVICE_WRITER' ? '/intake'
-          : staffData.role === 'TECHNICIAN' ? '/queue'
-          : staffData.role === 'MANAGER' ? '/admin'
-          : '/login';
+        const route =
+          staffData.role === 'SERVICE_WRITER' ? '/intake' :
+          staffData.role === 'TECHNICIAN'     ? '/queue' :
+          staffData.role === 'MANAGER'        ? '/admin' : '/login';
         router.push(route);
       }
     };
-
     handleAuthCallback();
   }, [tenant]);
 
@@ -140,20 +131,17 @@ export default function LoginPage() {
   // --- PIN PAD HANDLER ---
   const handlePinLogin = useCallback(async (code: string) => {
     if (!code.trim()) return;
-
     setError(null);
     setPinLoading(true);
     setPinSuccess(null);
 
     try {
-      // Query staff by ID code, scoped to the current tenant
       let query = supabase
         .from('staff')
         .select('id, id_code, name, role, tenant_id')
         .eq('id_code', code.toUpperCase())
         .eq('active', true);
 
-      // If device is activated and we know the tenant, scope to it
       if (tenant) {
         query = query.eq('tenant_id', tenant.id);
       }
@@ -167,19 +155,17 @@ export default function LoginPage() {
         return;
       }
 
-      // Save localStorage session
       saveSession(data.id_code, data.name, data.role);
 
-      // Brief success flash
       setPinSuccess(data.name);
-
       setTimeout(() => {
-        const route = data.role === 'SERVICE_WRITER' ? '/intake'
-          : data.role === 'TECHNICIAN' ? '/queue'
-          : data.role === 'MANAGER' ? '/admin'
-          : '/login';
+        const route =
+          data.role === 'SERVICE_WRITER' ? '/intake' :
+          data.role === 'TECHNICIAN'     ? '/queue' :
+          data.role === 'MANAGER'        ? '/admin' : '/login';
         router.push(route);
       }, 400);
+
     } catch (err) {
       setError('Login failed. Try again.');
       setPinCode('');
@@ -213,6 +199,7 @@ export default function LoginPage() {
 
     try {
       const redirectUrl = `${window.location.origin}/login`;
+
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase().trim(),
         options: {
@@ -223,8 +210,7 @@ export default function LoginPage() {
 
       if (authError) {
         setEmailState('error');
-        if (authError.message.includes('Signups not allowed') ||
-            authError.message.includes('User not found')) {
+        if (authError.message.includes('Signups not allowed') || authError.message.includes('User not found')) {
           setError('Your account must be created by an administrator.');
         } else {
           setError(authError.message);
@@ -251,19 +237,12 @@ export default function LoginPage() {
 
   const primaryColor = tenant?.primary_color || '#0EA5E9';
 
-  // =========================================================================
-  // RENDER
-  // =========================================================================
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-8">
       {/* Logo & Business Name */}
       <div className="text-center mb-6">
         {tenant?.logo_url ? (
-          <img
-            src={tenant.logo_url}
-            alt={tenant.name}
-            className="mx-auto mb-3 h-16 object-contain"
-          />
+          <img src={tenant.logo_url} alt={tenant.name} className="mx-auto mb-3 h-16 object-contain" />
         ) : (
           <div
             className="mx-auto mb-3 w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
@@ -281,27 +260,51 @@ export default function LoginPage() {
       {mode === 'pin' && (
         <div className="w-full max-w-sm">
           <div className="bg-white rounded-2xl shadow-lg p-6">
-            <p className="text-center text-gray-500 text-sm mb-4">
+            <p className="text-center text-gray-500 text-sm mb-6">
               Enter your ID code to clock in
             </p>
 
-            {/* Code Display */}
-            <div className="relative mb-5">
-              <div
-                className="w-full text-center text-3xl font-mono font-bold tracking-[0.3em] py-4 px-4 rounded-xl border-2 transition-colors"
-                style={{
-                  borderColor: error ? '#EF4444' : pinSuccess ? '#22C55E' : pinCode ? primaryColor : '#D1D5DB',
-                  backgroundColor: pinSuccess ? '#F0FDF4' : '#F9FAFB',
-                  color: pinSuccess ? '#16A34A' : '#1F2937',
-                }}
-              >
-                {pinSuccess ? (
-                  <span className="text-xl">✓ {pinSuccess}</span>
-                ) : (
-                  pinCode || <span className="text-gray-300">_ _ _ _</span>
-                )}
+            {/* Primary Text Input - Large & Prominent */}
+            {!pinSuccess ? (
+              <div className="relative mb-6">
+                <input
+                  type="text"
+                  value={pinCode}
+                  onChange={(e) => {
+                    setError(null);
+                    setPinCode(e.target.value.toUpperCase());
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && pinCode.trim()) {
+                      handlePinLogin(pinCode);
+                    }
+                  }}
+                  placeholder="Enter ID code"
+                  autoFocus
+                  maxLength={10}
+                  className="w-full text-center text-3xl font-mono font-bold tracking-[0.3em] py-4 px-4 rounded-xl border-2 transition-colors"
+                  style={{
+                    borderColor: error ? '#EF4444' : pinCode ? primaryColor : '#D1D5DB',
+                    backgroundColor: '#F9FAFB',
+                    color: '#1F2937',
+                  }}
+                />
               </div>
-            </div>
+            ) : (
+              /* Success State Display */
+              <div className="relative mb-6">
+                <div
+                  className="w-full text-center text-3xl font-mono font-bold tracking-[0.3em] py-4 px-4 rounded-xl border-2"
+                  style={{
+                    borderColor: '#22C55E',
+                    backgroundColor: '#F0FDF4',
+                    color: '#16A34A',
+                  }}
+                >
+                  <span className="text-xl">â {pinSuccess}</span>
+                </div>
+              </div>
+            )}
 
             {/* Error */}
             {error && mode === 'pin' && (
@@ -310,7 +313,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Number Pad */}
+            {/* Number Pad - Convenience Helper */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                 <button
@@ -341,7 +344,7 @@ export default function LoginPage() {
                 disabled={pinLoading || !!pinSuccess}
                 className="py-4 text-xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-all text-gray-500 disabled:opacity-50"
               >
-                ⌫
+                â«
               </button>
             </div>
 
@@ -361,26 +364,6 @@ export default function LoginPage() {
                 'Sign In'
               )}
             </button>
-
-            {/* Also support typing letters for codes like SW01, T01 */}
-            <div className="mt-3">
-              <input
-                type="text"
-                value={pinCode}
-                onChange={(e) => {
-                  setError(null);
-                  setPinCode(e.target.value.toUpperCase());
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && pinCode.trim()) {
-                    handlePinLogin(pinCode);
-                  }
-                }}
-                placeholder="Or type code (e.g. SW01)"
-                className="w-full text-center text-sm py-2 px-3 border border-gray-200 rounded-lg focus:border-sky-400 focus:ring-1 focus:ring-sky-200 outline-none text-gray-600"
-                maxLength={10}
-              />
-            </div>
           </div>
 
           {/* Switch to email login */}
@@ -389,7 +372,7 @@ export default function LoginPage() {
               onClick={() => { setMode('email'); setError(null); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
-              Manager / First-time setup →
+              Manager / First-time setup â
             </button>
           </div>
         </div>
@@ -401,15 +384,11 @@ export default function LoginPage() {
           <div className="bg-white rounded-2xl shadow-lg p-8">
             {emailState === 'access_denied' ? (
               <div className="text-center">
-                <div className="text-red-500 text-5xl mb-4">🚫</div>
+                <div className="text-red-500 text-5xl mb-4">ð«</div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h2>
                 <p className="text-gray-600 mb-6">{error}</p>
                 <button
-                  onClick={() => {
-                    setEmailState('idle');
-                    setError(null);
-                    setEmail('');
-                  }}
+                  onClick={() => { setEmailState('idle'); setError(null); setEmail(''); }}
                   className="w-full text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                   style={{ backgroundColor: primaryColor }}
                 >
@@ -418,14 +397,13 @@ export default function LoginPage() {
               </div>
             ) : emailState === 'sent' ? (
               <div className="text-center">
-                <div className="text-green-500 text-5xl mb-4">✉️</div>
+                <div className="text-green-500 text-5xl mb-4">âï¸</div>
                 <h2 className="text-xl font-bold text-gray-800 mb-2">Check Your Email</h2>
                 <p className="text-gray-600 mb-1">We sent a login link to:</p>
                 <p className="font-semibold text-gray-800 mb-5">{email}</p>
                 <p className="text-sm text-gray-500 mb-5">
                   Click the link in the email to sign in. The link expires in 1 hour.
                 </p>
-
                 <button
                   onClick={handleSendMagicLink}
                   disabled={cooldown > 0}
@@ -437,7 +415,6 @@ export default function LoginPage() {
                 >
                   {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Link'}
                 </button>
-
                 <button
                   onClick={() => { setEmailState('idle'); setEmail(''); }}
                   className="mt-3 text-sm text-sky-500 hover:underline"
@@ -456,7 +433,6 @@ export default function LoginPage() {
                 <p className="text-sm text-gray-500 mb-5">
                   Use email to activate this device or sign in as manager.
                 </p>
-
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
                 </label>
@@ -496,7 +472,6 @@ export default function LoginPage() {
                     'Send Login Link'
                   )}
                 </button>
-
                 <p className="mt-3 text-xs text-gray-400 text-center">
                   A secure login link will be sent to your email.
                 </p>
@@ -510,7 +485,7 @@ export default function LoginPage() {
               onClick={() => { setMode('pin'); setError(null); setEmailState('idle'); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >
-              ← Back to ID code login
+              â Back to ID code login
             </button>
           </div>
         </div>
