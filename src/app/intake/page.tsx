@@ -89,7 +89,9 @@ function IntakeContent() {
   const handleLogout = async () => {
     clearSession();
     await supabase.auth.signOut();
-    Object.keys(localStorage).forEach((key) => { if (key.startsWith('sb-')) localStorage.removeItem(key); });
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
     router.push('/');
   };
 
@@ -107,9 +109,10 @@ function IntakeContent() {
     : [];
 
   // Build a display name for the selected service
-  const selectedServiceName = selectedServiceRecord?.name
-    || SERVICE_TYPE_LABELS[selectedService || '']
-    || (selectedService || '').replace(/_/g, ' ');
+  const selectedServiceName =
+    selectedServiceRecord?.name ||
+    SERVICE_TYPE_LABELS[selectedService || ''] ||
+    (selectedService || '').replace(/_/g, ' ');
 
   const handleSubmit = async (data: {
     vehicle: string;
@@ -122,6 +125,7 @@ function IntakeContent() {
   }) => {
     if (submitting) return;
     setSubmitting(true);
+
     try {
       const { data: staff } = await supabase
         .from('staff')
@@ -192,6 +196,7 @@ function IntakeContent() {
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
       setSelectedService(null);
+
       if (searchParams.get('customer_id')) {
         handleRemoveCustomer();
       }
@@ -225,12 +230,20 @@ function IntakeContent() {
                 <p className="text-sm text-sky-100">Logged in as {session.name}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => router.push('/queue')}
+                className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+              >
+                Queue
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-white text-sky-600 px-4 py-2 rounded-lg font-semibold hover:bg-sky-50 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -281,7 +294,7 @@ function IntakeContent() {
                     onClick={() => setSelectedService(null)}
                     className="text-gray-600 hover:text-gray-800 font-semibold"
                   >
-                    ← Change Service
+                    â Change Service
                   </button>
                 </div>
                 <DynamicServiceForm
