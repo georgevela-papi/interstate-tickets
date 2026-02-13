@@ -212,7 +212,7 @@ export default function LoginPage() {
         email: email.toLowerCase().trim(),
         options: {
           emailRedirectTo: redirectUrl,
-          shouldCreateUser: true,
+          shouldCreateUser: false,
         },
       });
 
